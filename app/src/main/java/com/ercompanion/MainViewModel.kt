@@ -102,7 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         } else {
                             _connectionState.value = RetroArchClient.ConnectionStatus.ERROR
-                            _errorMessage.value = "Failed to parse save state"
+                            _errorMessage.value = "Parse failed: ${saveStateReader.lastStatus}"
                         }
                     } else {
                         // No new data, check if file exists
