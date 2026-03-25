@@ -158,8 +158,6 @@ class SaveStateReader(private val context: Context) {
         return result
     }
 
-    // Returns the raw party buffer (12 slots × 104 bytes) at the cached offset.
-    // Slot index 6 (0-based) is the enemy lead during battle in ER.
     fun readRawPartyBuffer(): ByteArray? {
         val rawBytes = stateFile?.readBytes() ?: return null
         val stateBytes = decompressIfNeeded(rawBytes) ?: return null
@@ -169,6 +167,33 @@ class SaveStateReader(private val context: Context) {
         val partyStart = offset + 4
         if (partyStart + 12 * 104 > ewram.size) return null
         return ewram.copyOfRange(partyStart, partyStart + 12 * 104)
+    }
+
+    /**
+     * Try to read gBattlerPartyIndexes[0] (active player party slot) from EWRAM.
+     * gBattlersCount and gBattlerPartyIndexes are declared together in battle_main.c.
+     * We scan for the pattern: count=2 (singles battle), then u16[0] in 0..5 (player slot).
+     * Returns -1 if not in battle or address not found.
+     */
+    fun readActivePlayerSlot(): Int {
+        val rawBytes = stateFile?.readBytes() ?: return -1
+        val stateBytes = decompressIfNeeded(rawBytes) ?: return -1
+        if (stateBytes.size < MGBA_STATE_SIZE) return -1
+        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+
+        // Scan for gBattlersCount=2 followed by gBattlerPartyIndexes[0] in 0..5
+        // The count is u8, then 1 byte padding, then u16[4] indexes
+        // Pattern: 0x02 0x00 [0-5] 0x00 [0-6] 0x00 ...
+        for (i in 0 until ewram.size - 10 step 2) {
+            if (ewram[i].toInt() and 0xFF != 2) continue
+            if (ewram[i+1].toInt() and 0xFF != 0) continue
+            val idx0 = (ewram[i+2].toInt() and 0xFF) or ((ewram[i+3].toInt() and 0xFF) shl 8)
+            val idx1 = (ewram[i+4].toInt() and 0xFF) or ((ewram[i+5].toInt() and 0xFF) shl 8)
+            if (idx0 in 0..5 && idx1 in 0..6) {
+                return idx0
+            }
+        }
+        return -1
     }
 
     // Read enemy party from save state — gEnemyPartyCount is 1 byte after gPlayerPartyCount,

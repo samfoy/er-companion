@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     val connectionState by viewModel.connectionState.collectAsState()
                     val partyState by viewModel.partyState.collectAsState()
                     val enemyPartyState by viewModel.enemyPartyState.collectAsState()
+                    val activePlayerSlot by viewModel.activePlayerSlot.collectAsState()
                     val scanningState by viewModel.scanningState.collectAsState()
                     val errorMessage by viewModel.errorMessage.collectAsState()
                     val debugLog by viewModel.debugLog.collectAsState()
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
                         connectionState = connectionState,
                         partyState = partyState,
                         enemyPartyState = enemyPartyState,
+                        activePlayerSlot = activePlayerSlot,
                         scanningState = scanningState,
                         errorMessage = errorMessage,
                         debugLog = debugLog,

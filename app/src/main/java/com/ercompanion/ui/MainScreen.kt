@@ -41,6 +41,7 @@ fun MainScreen(
     connectionState: RetroArchClient.ConnectionStatus,
     partyState: List<PartyMon?>,
     enemyPartyState: List<PartyMon?>,
+    activePlayerSlot: Int,
     scanningState: Boolean,
     errorMessage: String?,
     debugLog: List<String>,
@@ -146,7 +147,9 @@ fun MainScreen(
         // Enemy lead card (slot 7 from save state = active enemy during battle)
         val enemyLead = enemyPartyState.firstOrNull()
         if (enemyLead != null) {
-            EnemyLeadCard(enemyLead = enemyLead, playerParty = partyState, viewModel = viewModel)
+            // AI predictions target the currently active player mon
+            val activeMon = if (activePlayerSlot >= 0) partyState.getOrNull(activePlayerSlot) else partyState.firstOrNull { it != null }
+            EnemyLeadCard(enemyLead = enemyLead, activeMon = activeMon, viewModel = viewModel)
             Spacer(modifier = Modifier.height(12.dp))
         }
 
@@ -168,7 +171,15 @@ fun MainScreen(
             ) {
                 partyState.forEachIndexed { index, mon ->
                     if (mon != null) {
-                        PokemonCard(viewModel = viewModel, mon = mon, slotNumber = index + 1, enemyTarget = enemyLead)
+                        val isActive = index == activePlayerSlot
+                        PokemonCard(
+                            viewModel = viewModel,
+                            mon = mon,
+                            slotNumber = index + 1,
+                            enemyTarget = enemyLead,
+                            isActive = isActive,
+                            showAiPrediction = isActive
+                        )
                     }
                 }
             }
@@ -177,7 +188,7 @@ fun MainScreen(
 }
 
 @Composable
-fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: MainViewModel) {
+fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainViewModel) {
     val speciesName = PokemonData.getSpeciesName(enemyLead.species)
     val types = PokemonData.getSpeciesTypes(enemyLead.species)
     val typeNames = types.map { typeId ->
@@ -185,14 +196,14 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
                "Fire","Water","Grass","Electric","Psychic","Ice","Dragon","Dark","Fairy"
         ).getOrNull(typeId) ?: "?"
     }
-    val playerLead = playerParty.firstOrNull { it != null }
 
-    // Score all enemy moves using AI simulator
-    val scoredMoves = if (playerLead != null) {
-        com.ercompanion.calc.BattleAISimulator.scoreMovesVsTarget(enemyLead, playerLead)
+    // Score enemy moves vs the active player mon
+    val scoredMoves = if (activeMon != null) {
+        com.ercompanion.calc.BattleAISimulator.scoreMovesVsTarget(enemyLead, activeMon)
     } else emptyList()
     val predicted = com.ercompanion.calc.BattleAISimulator.predictAiMove(scoredMoves)
     val isRandom = predicted.size > 1
+    val playerName = activeMon?.let { PokemonData.getSpeciesName(it.species) } ?: "?"
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -246,12 +257,11 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
             }
 
             // AI move prediction
-            if (scoredMoves.isNotEmpty() && playerLead != null) {
+            if (scoredMoves.isNotEmpty() && activeMon != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider(color = Color(0xFF3A2A2A))
                 Spacer(modifier = Modifier.height(6.dp))
 
-                val playerName = PokemonData.getSpeciesName(playerLead.species)
                 Text(
                     text = if (isRandom) "🎲 AI: random (${predicted.size} tied)" else "🎯 AI will likely use:",
                     style = MaterialTheme.typography.labelSmall,
@@ -306,7 +316,7 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
 }
 
 @Composable
-fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null) {
+fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     val speciesName = PokemonData.getSpeciesName(mon.species)
     val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
@@ -316,9 +326,10 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
             .fillMaxWidth()
             .clickable { expanded = !expanded },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isActive) Color(0xFF1A2A1A) else MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        border = if (isActive) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)) else null
     ) {
         Column(
             modifier = Modifier
@@ -333,9 +344,10 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "#$slotNumber",
+                        text = if (isActive) "▶ $slotNumber" else "#$slotNumber",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray,
+                        color = if (isActive) Color(0xFF4CAF50) else Color.Gray,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                         modifier = Modifier.padding(end = 8.dp)
                     )
                     val ctx = LocalContext.current

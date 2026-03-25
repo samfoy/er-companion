@@ -33,6 +33,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _enemyPartyState = MutableStateFlow<List<PartyMon?>>(emptyList())
     val enemyPartyState: StateFlow<List<PartyMon?>> = _enemyPartyState.asStateFlow()
 
+    // Index of the active player party slot (0-5), -1 if unknown / not in battle
+    private val _activePlayerSlot = MutableStateFlow(-1)
+    val activePlayerSlot: StateFlow<Int> = _activePlayerSlot.asStateFlow()
+
     private val _scanningState = MutableStateFlow(false)
     val scanningState: StateFlow<Boolean> = _scanningState.asStateFlow()
 
@@ -92,15 +96,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             val rawBuf = saveStateReader.readRawPartyBuffer()
                             if (rawBuf != null && rawBuf.size >= 7 * 104) {
                                 val enemyLead = Gen3PokemonParser.parseParty(rawBuf, 7).getOrNull(6)
-                                // Only show enemy card if it looks like an active battle mon
-                                // (has valid species, non-zero HP, non-zero level)
                                 val isValidEnemy = enemyLead != null
                                     && enemyLead.species > 0
                                     && enemyLead.level > 0
                                     && enemyLead.maxHp > 0
                                 _enemyPartyState.value = if (isValidEnemy) listOf(enemyLead!!) else emptyList()
+
+                                // Determine active player slot from save state
+                                // Try gBattlerPartyIndexes first, fall back to heuristic
+                                val activeSlot = saveStateReader.readActivePlayerSlot()
+                                _activePlayerSlot.value = if (isValidEnemy && activeSlot >= 0) activeSlot
+                                    else if (isValidEnemy) inferActiveSlot(party)
+                                    else -1
                             } else {
                                 _enemyPartyState.value = emptyList()
+                                _activePlayerSlot.value = -1
                             }
                         } else {
                             _connectionState.value = RetroArchClient.ConnectionStatus.ERROR
@@ -187,6 +197,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun listAllStateFiles(): List<String> {
         return saveStateReader.listAllStateFiles()
+    }
+
+    /** Heuristic: the active mon is likely the first non-fainted mon with damage taken,
+     *  or simply the first non-fainted mon if none have taken damage. */
+    private fun inferActiveSlot(party: List<PartyMon?>): Int {
+        val damaged = party.indexOfFirst { it != null && it.hp > 0 && it.hp < it.maxHp }
+        if (damaged >= 0) return damaged
+        return party.indexOfFirst { it != null && it.hp > 0 }.coerceAtLeast(0)
     }
 
     fun calcDamage(attacker: com.ercompanion.parser.PartyMon, defender: com.ercompanion.parser.PartyMon, moveData: com.ercompanion.data.MoveData): Int {
