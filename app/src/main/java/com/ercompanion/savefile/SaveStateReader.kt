@@ -52,20 +52,17 @@ class SaveStateReader(private val context: Context) {
             } ?: continue
             if (stateFiles.isEmpty()) continue
 
-            // Prefer: Emerald Rogue .state.auto first (most recent auto-save)
-            val erAuto = stateFiles
-                .filter { it.name.contains("Emerald Rogue", ignoreCase = true) && it.name.endsWith(".state.auto") }
-                .maxByOrNull { it.lastModified() }
-            if (erAuto != null) return erAuto
+            // Sort all by most recently modified
+            val sorted = stateFiles.sortedByDescending { it.lastModified() }
 
-            // Then any Emerald Rogue state
-            val erAny = stateFiles
-                .filter { it.name.contains("Emerald Rogue", ignoreCase = true) }
-                .maxByOrNull { it.lastModified() }
-            if (erAny != null) return erAny
+            // Prefer any Emerald Rogue file (most recent first)
+            val erFile = sorted.firstOrNull { it.name.contains("Emerald", ignoreCase = true) ||
+                                              it.name.contains("Rogue", ignoreCase = true) ||
+                                              it.name.contains("emerogue", ignoreCase = true) }
+            if (erFile != null) return erFile
 
-            // Fall back to most recent
-            return stateFiles.maxByOrNull { it.lastModified() }
+            // Fall back to most recently modified file in this dir
+            return sorted.first()
         }
         return null
     }
@@ -82,8 +79,9 @@ class SaveStateReader(private val context: Context) {
             if (files.isEmpty()) {
                 results.add("$path — empty")
             } else {
-                files.sortedByDescending { it.lastModified() }.take(5).forEach {
-                    results.add("${it.name} (${it.length()/1024}KB)")
+                files.sortedByDescending { it.lastModified() }.take(8).forEach {
+                    val age = (System.currentTimeMillis() - it.lastModified()) / 1000
+                    results.add("${it.name} (${it.length()/1024}KB, ${age}s ago)")
                 }
             }
         }
@@ -116,7 +114,8 @@ class SaveStateReader(private val context: Context) {
         }
 
         val rawBytes = file.readBytes()
-        lastStatus = "Found: ${file.name} (${rawBytes.size} bytes raw)"
+        val fileAge = (System.currentTimeMillis() - file.lastModified()) / 1000
+        lastStatus = "Found: ${file.name} (${rawBytes.size/1024}KB, ${fileAge}s old)"
 
         // Decompress if needed
         val stateBytes = decompressIfNeeded(rawBytes) ?: run {
