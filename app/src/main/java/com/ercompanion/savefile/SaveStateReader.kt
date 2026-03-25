@@ -170,10 +170,11 @@ class SaveStateReader(private val context: Context) {
     }
 
     /**
-     * Try to read gBattlerPartyIndexes[0] (active player party slot) from EWRAM.
-     * gBattlersCount and gBattlerPartyIndexes are declared together in battle_main.c.
-     * We scan for the pattern: count=2 (singles battle), then u16[0] in 0..5 (player slot).
-     * Returns -1 if not in battle or address not found.
+     * Read gBattlerPartyIndexes[0] (active player party slot) from EWRAM.
+     * Confirmed address: EWRAM+0x1839c = gBattlersCount (u8), +0x1839d = pad,
+     * +0x1839e = gBattlerPartyIndexes[0] (u16, player active slot 0-5),
+     * +0x183a0 = gBattlerPartyIndexes[1] (u16, enemy active party slot).
+     * Returns -1 if not in battle (gBattlersCount != 2).
      */
     fun readActivePlayerSlot(): Int {
         val rawBytes = stateFile?.readBytes() ?: return -1
@@ -181,19 +182,17 @@ class SaveStateReader(private val context: Context) {
         if (stateBytes.size < MGBA_STATE_SIZE) return -1
         val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
 
-        // Scan for gBattlersCount=2 followed by gBattlerPartyIndexes[0] in 0..5
-        // The count is u8, then 1 byte padding, then u16[4] indexes
-        // Pattern: 0x02 0x00 [0-5] 0x00 [0-6] 0x00 ...
-        for (i in 0 until ewram.size - 10 step 2) {
-            if (ewram[i].toInt() and 0xFF != 2) continue
-            if (ewram[i+1].toInt() and 0xFF != 0) continue
-            val idx0 = (ewram[i+2].toInt() and 0xFF) or ((ewram[i+3].toInt() and 0xFF) shl 8)
-            val idx1 = (ewram[i+4].toInt() and 0xFF) or ((ewram[i+5].toInt() and 0xFF) shl 8)
-            if (idx0 in 0..5 && idx1 in 0..6) {
-                return idx0
-            }
-        }
-        return -1
+        // Confirmed: gBattlersCount at EWRAM+0x1839c
+        val BATTLERS_COUNT_OFFSET = 0x1839c
+        if (BATTLERS_COUNT_OFFSET + 6 > ewram.size) return -1
+
+        val battlersCount = ewram[BATTLERS_COUNT_OFFSET].toInt() and 0xFF
+        if (battlersCount != 2) return -1  // not in singles battle
+
+        // gBattlerPartyIndexes[0] = player active slot (u16 at +2)
+        val playerSlot = (ewram[BATTLERS_COUNT_OFFSET + 2].toInt() and 0xFF) or
+                         ((ewram[BATTLERS_COUNT_OFFSET + 3].toInt() and 0xFF) shl 8)
+        return if (playerSlot in 0..5) playerSlot else -1
     }
 
     // Read enemy party from save state — gEnemyPartyCount is 1 byte after gPlayerPartyCount,

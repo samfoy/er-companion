@@ -91,8 +91,8 @@ object Gen3PokemonParser {
         val spAttack = readU16(data, 0x60)
         val spDefense = readU16(data, 0x62)
 
-        // Validate
-        if (species == 0 || species > 412 || level == 0 || level > 100) {
+        // Validate — ER has up to 1526 species
+        if (species == 0 || species > 1526 || level == 0 || level > 100) {
             return null
         }
 
