@@ -293,6 +293,11 @@ class SaveStateReader(private val context: Context) {
                     ((partyBytes[monOffset + 89].toInt() and 0xFF) shl 8)
         if (maxHP == 0 || maxHP > 9999) return false
 
+        // maxHP sanity: even a 252 HP EV'd mon at level 100 won't exceed ~500 HP for most species.
+        // A loose cap: maxHP should be roughly <= level * 10 + 200 (generous for tanky mons).
+        // This catches false positives like Lv8 with 771 HP.
+        if (maxHP > level * 10 + 250) return false
+
         // currentHP (offset 86, unencrypted u16) must be <= maxHP
         val currentHP = (partyBytes[monOffset + 86].toInt() and 0xFF) or
                         ((partyBytes[monOffset + 87].toInt() and 0xFF) shl 8)
@@ -322,27 +327,10 @@ class SaveStateReader(private val context: Context) {
     }
 
     private fun scanForParty(ewram: ByteArray): Int {
-        // Known ER party location: EWRAM+0x3777c (confirmed from state file analysis)
-        // This is fixed in the ER binary — try it first unconditionally
+        // ER mocha has a fixed address — only try this, never do a full EWRAM scan.
+        // A broad scan produces false positives (random EWRAM data that passes isValidMon).
         val knownHint = 0x3777c
         tryReadPartyAt(ewram, knownHint)?.let { return knownHint }
-
-        // Scan outward from hint, then full EWRAM
-        val scanRanges = listOf(
-            knownHint - 0x4000 to knownHint + 0x4000,
-            0 to ewram.size - 628
-        )
-        for ((start, end) in scanRanges) {
-            var i = maxOf(0, start)
-            val limit = minOf(end, ewram.size - 628)
-            while (i <= limit) {
-                if (i != knownHint) { // already tried hint
-                    val result = tryReadPartyAt(ewram, i)
-                    if (result != null && result.first >= 1) return i
-                }
-                i += 4
-            }
-        }
         return -1
     }
 
