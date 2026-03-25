@@ -170,6 +170,21 @@ class SaveStateReader(private val context: Context) {
     }
 
     /**
+     * Returns true only if gBattlersCount == 2 (singles battle in progress).
+     * This is the authoritative in-battle signal — enemy party memory is stale
+     * after battles end so never show enemy UI when this returns false.
+     */
+    fun readInBattle(): Boolean {
+        val rawBytes = stateFile?.readBytes() ?: return false
+        val stateBytes = decompressIfNeeded(rawBytes) ?: return false
+        if (stateBytes.size < MGBA_STATE_SIZE) return false
+        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+        val BATTLERS_COUNT_OFFSET = 0x1839c
+        if (BATTLERS_COUNT_OFFSET >= ewram.size) return false
+        return ewram[BATTLERS_COUNT_OFFSET].toInt() and 0xFF == 2
+    }
+
+    /**
      * Read gBattlerPartyIndexes[0] (active player party slot) from EWRAM.
      * Confirmed address: EWRAM+0x1839c = gBattlersCount (u8), +0x1839d = pad,
      * +0x1839e = gBattlerPartyIndexes[0] (u16, player active slot 0-5),

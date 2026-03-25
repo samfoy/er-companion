@@ -97,7 +97,14 @@ Moves are four u16s at the start of substruct 1.
 
 ---
 
-## OT ID Filtering
+## In-Battle Detection
+
+**Always use `gBattlersCount == 2` as the authoritative in-battle signal.**  
+Do NOT use OT ID alone — enemy party memory persists after battle ends and will show stale trainer
+mons out-of-battle.
+
+`readInBattle()` in `SaveStateReader` checks `EWRAM+0x1839c == 2`.  
+Enemy party is only populated in the UI when `inBattle == true`.
 
 ER stores the **full trainer party** in save state slots after the player party (same memory block).
 Both player and trainer mons can appear in slots 0–11.

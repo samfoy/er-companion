@@ -99,9 +99,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             _partyState.value = party
                             _errorMessage.value = null
 
-                            // Enemy party: mons in slots 0..11 with a different OT ID
+                            // Enemy party: only show if actively in battle (gBattlersCount == 2)
+                            // Enemy party memory is stale after battles end — never trust OT ID alone
                             val rawBuf = saveStateReader.readRawPartyBuffer()
-                            if (rawBuf != null) {
+                            val inBattle = saveStateReader.readInBattle()
+                            if (rawBuf != null && inBattle) {
                                 val enemySlots = Gen3PokemonParser.parseAllSlots(rawBuf)
                                     .filterNotNull()
                                     .filter { playerOtId < 0 || it.otId != playerOtId }
