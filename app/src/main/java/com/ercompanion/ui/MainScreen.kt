@@ -39,6 +39,7 @@ import com.ercompanion.utils.TopHalfCropTransformation
 fun MainScreen(
     viewModel: MainViewModel,
     connectionState: RetroArchClient.ConnectionStatus,
+    dataSource: MainViewModel.DataSource,
     partyState: List<PartyMon?>,
     enemyPartyState: List<PartyMon?>,
     activePlayerSlot: Int,
@@ -67,35 +68,55 @@ fun MainScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when (connectionState) {
-                                RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
-                                RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
-                                RetroArchClient.ConnectionStatus.ERROR -> HPRed
-                            }
-                        )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = when (connectionState) {
-                        RetroArchClient.ConnectionStatus.CONNECTED -> "Connected"
-                        RetroArchClient.ConnectionStatus.DISCONNECTED -> "Disconnected"
-                        RetroArchClient.ConnectionStatus.ERROR -> "Error"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                TextButton(
-                    onClick = onRescan,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text("↺ Rescan", fontSize = 12.sp, color = Color(0xFF888888))
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (connectionState) {
+                                    RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
+                                    RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
+                                    RetroArchClient.ConnectionStatus.ERROR -> HPRed
+                                }
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = when (connectionState) {
+                            RetroArchClient.ConnectionStatus.CONNECTED -> "Connected"
+                            RetroArchClient.ConnectionStatus.DISCONNECTED -> "Disconnected"
+                            RetroArchClient.ConnectionStatus.ERROR -> "Error"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    TextButton(
+                        onClick = onRescan,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("↺ Rescan", fontSize = 12.sp, color = Color(0xFF888888))
+                    }
+                }
+                // Data source indicator
+                if (connectionState == RetroArchClient.ConnectionStatus.CONNECTED) {
+                    Text(
+                        text = when (dataSource) {
+                            MainViewModel.DataSource.UDP -> "⚡ UDP LIVE"
+                            MainViewModel.DataSource.SAVE_STATE -> "📁 SAVE STATE"
+                            MainViewModel.DataSource.DISCONNECTED -> ""
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when (dataSource) {
+                            MainViewModel.DataSource.UDP -> Color(0xFF4CAF50)
+                            MainViewModel.DataSource.SAVE_STATE -> Color(0xFFFF9800)
+                            MainViewModel.DataSource.DISCONNECTED -> Color.Gray
+                        },
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
         }
@@ -238,7 +259,8 @@ fun MainScreen(
                                 EnemyLeadCard(
                                     enemyLead = enemy,
                                     activeMon = activeMon,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    enemyPartyState = enemyPartyState
                                 )
                             } else {
                                 // Collapsed enemy chip
@@ -362,7 +384,8 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Outgoing: best move vs enemy
                     if (bestDmgPct != null && bestDmgPct > 0) {
@@ -371,16 +394,28 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
                             bestDmgPct >= 50  -> HPYellow
                             else              -> Color.Gray
                         }
-                        Text("→ ${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Deals ", style = MaterialTheme.typography.labelSmall, color = Color(0xFF666666), fontSize = 9.sp)
+                            Text("${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            if (bestDmgPct >= 100) Text(" 💀", fontSize = 8.sp)
+                        }
                     }
                     // Incoming: enemy best move vs this mon
-                    if (enemyDmgPct != null && enemyDmgPct > 0) {
-                        val color = when {
-                            enemyDmgPct >= 100 -> HPRed
-                            enemyDmgPct >= 50  -> HPYellow
-                            else              -> Color(0xFF888888)
+                    if (enemyDmgPct != null) {
+                        if (enemyDmgPct <= 25) {
+                            Text("✅ Safe", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        } else {
+                            val color = when {
+                                enemyDmgPct >= 100 -> HPRed
+                                enemyDmgPct >= 50  -> HPYellow
+                                else              -> Color(0xFF888888)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Takes ", style = MaterialTheme.typography.labelSmall, color = Color(0xFF666666), fontSize = 9.sp)
+                                Text("${enemyDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                if (enemyDmgPct >= 100) Text(" 💀", fontSize = 8.sp)
+                            }
                         }
-                        Text("← ${enemyDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
                     }
                 }
             }
@@ -389,7 +424,7 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
 }
 
 @Composable
-fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainViewModel) {
+fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainViewModel, enemyPartyState: List<PartyMon?>) {
     val speciesName = PokemonData.getSpeciesName(enemyLead.species)
     val types = PokemonData.getSpeciesTypes(enemyLead.species)
     val typeNames = types.map { typeId ->
@@ -432,11 +467,57 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFFF6B6B)
                     )
-                    Text(
-                        text = "Lv.${enemyLead.level}  ${typeNames.joinToString("/")}  Spd:${enemyLead.speed}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
-                    )
+                    // Held item indicator
+                    if (enemyLead.heldItem > 0) {
+                        val itemEffect = com.ercompanion.data.ItemData.getItemEffect(enemyLead.heldItem)
+                        if (itemEffect != null) {
+                            Text(
+                                text = "📦 ${itemEffect.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFD700),
+                                fontSize = 9.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                    // Ability indicator
+                    if (enemyLead.ability > 0) {
+                        val abilityEffect = com.ercompanion.data.AbilityData.getAbilityEffect(enemyLead.ability)
+                        if (abilityEffect != null) {
+                            Text(
+                                text = "✨ ${abilityEffect.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF9C27B0),
+                                fontSize = 9.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                    // Nature indicator
+                    if (enemyLead.personality > 0u) {
+                        val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(enemyLead.personality)
+                        if (!nature.isNeutral) {
+                            Text(
+                                text = "🌟 ${nature.name} (+${nature.increasedStat} -${nature.decreasedStat})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFF9800),
+                                fontSize = 9.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        types.forEach { typeId ->
+                            TypeBadge(typeId)
+                        }
+                    }
+                    if (activeMon != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        SpeedComparisonIndicator(activeMon.speed, enemyLead.speed)
+                    }
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
@@ -478,6 +559,80 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                         sm.damagePercent >= 50  -> Color(0xFFFFEB3B)
                         else                    -> Color(0xFFAAAAAA)
                     }
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (isPredicted) "▶ " else "  ",
+                                    fontSize = 10.sp,
+                                    color = if (isPredicted) Color(0xFFFF6B6B) else Color.Transparent
+                                )
+                                Text(
+                                    text = sm.moveName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isPredicted) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isPredicted) Color.White else Color.Gray
+                                )
+                                if (sm.moveData?.power != null && sm.moveData.power > 0) {
+                                    Text(
+                                        text = " (${sm.moveData.power})",
+                                        fontSize = 9.sp,
+                                        color = Color(0xFF888888)
+                                    )
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (sm.damagePercent > 0) "${sm.damagePercent}% vs $playerName" else sm.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = dmgColor
+                                )
+                            }
+                        }
+                        // OHKO/2HKO indicator for predicted moves
+                        if (isPredicted && sm.damagePercent > 0) {
+                            KOIndicator(sm.damagePercent, activeMon.hp, activeMon.maxHp)
+                        }
+                    }
+                }
+            }
+
+            // Catch chance calculator (for wild Pokemon)
+            if (enemyPartyState.size == 1 && activeMon != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = Color(0xFF3A2A2A))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "🎯 Catch Chance",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val catchRate = com.ercompanion.calc.CatchRateCalculator.getSpeciesCatchRate(enemyLead.species)
+                val balls = listOf(
+                    "Poké Ball" to com.ercompanion.calc.CatchRateCalculator.POKE_BALL,
+                    "Great Ball" to com.ercompanion.calc.CatchRateCalculator.GREAT_BALL,
+                    "Ultra Ball" to com.ercompanion.calc.CatchRateCalculator.ULTRA_BALL,
+                    "Quick Ball" to com.ercompanion.calc.CatchRateCalculator.QUICK_BALL,
+                    "Timer Ball" to com.ercompanion.calc.CatchRateCalculator.TIMER_BALL,
+                    "Dusk Ball" to com.ercompanion.calc.CatchRateCalculator.DUSK_BALL,
+                    "Repeat Ball" to com.ercompanion.calc.CatchRateCalculator.REPEAT_BALL,
+                    "Net Ball" to com.ercompanion.calc.CatchRateCalculator.NET_BALL,
+                    "Dive Ball" to com.ercompanion.calc.CatchRateCalculator.DIVE_BALL
+                )
+
+                balls.forEach { (ballName, ballMod) ->
+                    val chance = com.ercompanion.calc.CatchRateCalculator.calculateCatchChance(
+                        enemyLead.hp, enemyLead.maxHp, catchRate, ballMod
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -485,32 +640,43 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isPredicted) "▶ " else "  ",
-                                fontSize = 10.sp,
-                                color = if (isPredicted) Color(0xFFFF6B6B) else Color.Transparent
-                            )
-                            Text(
-                                text = sm.moveName,
+                                text = ballName,
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isPredicted) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isPredicted) Color.White else Color.Gray
+                                fontSize = 11.sp,
+                                color = Color.White
                             )
-                            if (sm.moveData?.power != null && sm.moveData.power > 0) {
-                                Text(
-                                    text = " (${sm.moveData.power})",
-                                    fontSize = 9.sp,
-                                    color = Color(0xFF888888)
-                                )
-                            }
+                            // Shake indicators
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "⚪".repeat(chance.shakeCount),
+                                fontSize = 10.sp,
+                                color = Color(0xFF888888)
+                            )
+                        }
+                        val percentColor = when {
+                            chance.percentChance >= 75 -> Color(0xFF4CAF50)
+                            chance.percentChance >= 50 -> Color(0xFFFFEB3B)
+                            chance.percentChance >= 25 -> Color(0xFFFF9800)
+                            else -> Color(0xFFFF6B6B)
                         }
                         Text(
-                            text = if (sm.damagePercent > 0) "${sm.damagePercent}% vs $playerName" else sm.label,
+                            text = "${chance.percentChance}%",
                             style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.sp,
-                            color = dmgColor
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = percentColor
                         )
                     }
                 }
+
+                // Tip for status effects
+                Text(
+                    text = "💡 Sleep/Freeze: 2x catch rate",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }
@@ -568,28 +734,80 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                             .padding(end = 8.dp)
                     )
                     Column {
-                        Text(
-                            text = speciesName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (pokemonBuild?.tier != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = pokemonBuild.tier,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
+                                text = speciesName,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = when (pokemonBuild.tier) {
-                                    "Z"  -> Color(0xFFFF00FF) // Magenta — legendary
-                                    "S+" -> Color(0xFFFF4444) // Bright red
-                                    "S"  -> Color(0xFFFFD700) // Gold
-                                    "A"  -> Color(0xFF4CAF50) // Green
-                                    "B"  -> Color(0xFF2196F3) // Blue
-                                    "C"  -> Color(0xFF9E9E9E) // Gray
-                                    else -> Color(0xFF666666)
-                                }
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            if (pokemonBuild?.tier != null) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = pokemonBuild.tier,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (pokemonBuild.tier) {
+                                        "Z"  -> Color(0xFFFF00FF) // Magenta — legendary
+                                        "S+" -> Color(0xFFFF4444) // Bright red
+                                        "S"  -> Color(0xFFFFD700) // Gold
+                                        "A"  -> Color(0xFF4CAF50) // Green
+                                        "B"  -> Color(0xFF2196F3) // Blue
+                                        "C"  -> Color(0xFF9E9E9E) // Gray
+                                        else -> Color(0xFF666666)
+                                    }
+                                )
+                            }
+                        }
+                        // Held item indicator
+                        if (mon.heldItem > 0) {
+                            val itemEffect = com.ercompanion.data.ItemData.getItemEffect(mon.heldItem)
+                            if (itemEffect != null) {
+                                Text(
+                                    text = "📦 ${itemEffect.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFFD700),
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                        }
+                        // Ability indicator
+                        if (mon.ability > 0) {
+                            val abilityEffect = com.ercompanion.data.AbilityData.getAbilityEffect(mon.ability)
+                            if (abilityEffect != null) {
+                                Text(
+                                    text = "✨ ${abilityEffect.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF9C27B0),
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                        }
+                        // Nature indicator
+                        if (mon.personality > 0u) {
+                            val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.personality)
+                            if (!nature.isNeutral) {
+                                Text(
+                                    text = "🌟 ${nature.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFF9800),
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                        }
+                        // Type badges
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            val types = PokemonData.getSpeciesTypes(mon.species)
+                            types.forEach { typeId ->
+                                TypeBadge(typeId)
+                            }
                         }
                     }
                 }
@@ -614,11 +832,26 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
-                    Text(
-                        text = "${mon.hp} / ${mon.maxHp}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${mon.hp} / ${mon.maxHp}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        // Status condition
+                        if (mon.status > 0) {
+                            val statusCondition = com.ercompanion.data.StatusData.getStatusCondition(mon.status)
+                            if (statusCondition != null) {
+                                Text(
+                                    text = "${statusCondition.emoji} ${statusCondition.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(statusCondition.color),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -670,6 +903,137 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         StatItem("EXP", mon.experience)
                     }
 
+                    // Nature display
+                    if (mon.personality > 0u) {
+                        val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.personality)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider(color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🌟 ${nature.name} Nature",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFFF9800),
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (!nature.isNeutral) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "+${nature.increasedStat}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF4CAF50),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "-${nature.decreasedStat}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFF44336),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Neutral",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Held item effects
+                    if (mon.heldItem > 0) {
+                        val itemEffect = com.ercompanion.data.ItemData.getItemEffect(mon.heldItem)
+                        if (itemEffect != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Divider(color = Color.DarkGray)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Column(modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1A1A2E), RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = "📦 ${itemEffect.name}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFFFD700),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (itemEffect.description.isNotEmpty()) {
+                                    Text(
+                                        text = itemEffect.description,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFCCCCCC),
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+
+                                // Show modified stats if item affects them
+                                val modifiedStats = com.ercompanion.data.ItemData.applyItemToStats(
+                                    attack = mon.attack,
+                                    defense = mon.defense,
+                                    spAttack = mon.spAttack,
+                                    spDefense = mon.spDefense,
+                                    speed = mon.speed,
+                                    itemId = mon.heldItem,
+                                    currentHp = mon.hp,
+                                    maxHp = mon.maxHp
+                                )
+
+                                val hasStatChange = modifiedStats.attack != mon.attack ||
+                                    modifiedStats.defense != mon.defense ||
+                                    modifiedStats.spAttack != mon.spAttack ||
+                                    modifiedStats.spDefense != mon.spDefense ||
+                                    modifiedStats.speed != mon.speed
+
+                                if (hasStatChange) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Modified Stats:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF4CAF50),
+                                        fontSize = 9.sp
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        if (modifiedStats.attack != mon.attack) {
+                                            Text("ATK: ${modifiedStats.attack}", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                                        }
+                                        if (modifiedStats.defense != mon.defense) {
+                                            Text("DEF: ${modifiedStats.defense}", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                                        }
+                                        if (modifiedStats.speed != mon.speed) {
+                                            Text("SPD: ${modifiedStats.speed}", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        if (modifiedStats.spAttack != mon.spAttack) {
+                                            Text("SP.ATK: ${modifiedStats.spAttack}", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                                        }
+                                        if (modifiedStats.spDefense != mon.spDefense) {
+                                            Text("SP.DEF: ${modifiedStats.spDefense}", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Recommended build — collapsed by default
                     if (pokemonBuild != null) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -716,6 +1080,66 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         }
                     }
 
+                    // Hidden Power calculator
+                    if (mon.ivHp > 0 || mon.ivAttack > 0) {  // Check if we have IV data
+                        val hiddenPower = com.ercompanion.calc.HiddenPowerCalculator.calculate(
+                            ivHp = mon.ivHp,
+                            ivAttack = mon.ivAttack,
+                            ivDefense = mon.ivDefense,
+                            ivSpeed = mon.ivSpeed,
+                            ivSpAttack = mon.ivSpAttack,
+                            ivSpDefense = mon.ivSpDefense
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider(color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚡ Hidden Power",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFFFEB3B),
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TypeBadge(
+                                    typeId = when (hiddenPower.typeName) {
+                                        "Normal" -> 0
+                                        "Fighting" -> 1
+                                        "Flying" -> 2
+                                        "Poison" -> 3
+                                        "Ground" -> 4
+                                        "Rock" -> 5
+                                        "Bug" -> 6
+                                        "Ghost" -> 7
+                                        "Steel" -> 8
+                                        "Fire" -> 9
+                                        "Water" -> 10
+                                        "Grass" -> 11
+                                        "Electric" -> 12
+                                        "Psychic" -> 13
+                                        "Ice" -> 14
+                                        "Dragon" -> 15
+                                        "Dark" -> 16
+                                        "Fairy" -> 17
+                                        else -> 0
+                                    }
+                                )
+                                Text(
+                                    text = "Pwr: ${hiddenPower.power}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+
                     // Moves with damage calculations
                     if (mon.moves.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -725,11 +1149,32 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                             color = Color.Gray
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        mon.moves.forEach { moveId ->
+
+                        // Calculate best move for highlighting
+                        val bestMoveId = if (enemyTarget != null) {
+                            mon.moves.filter { it != 0 }.maxByOrNull { moveId ->
+                                val md = PokemonData.getMoveData(moveId)
+                                if (md == null || md.power == 0) return@maxByOrNull 0
+                                val attackStat = if (md.category == 0) mon.attack else mon.spAttack
+                                val defenseStat = if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense
+                                val result = com.ercompanion.calc.DamageCalculator.calc(
+                                    mon.level, attackStat, defenseStat, md.power, md.type,
+                                    PokemonData.getSpeciesTypes(mon.species),
+                                    PokemonData.getSpeciesTypes(enemyTarget.species),
+                                    enemyTarget.maxHp
+                                )
+                                result.maxDamage
+                            }
+                        } else null
+
+                        mon.moves.forEachIndexed { moveIndex, moveId ->
                             MoveItem(
                                 mon = mon,
                                 moveId = moveId,
-                                enemyTarget = enemyTarget
+                                moveIndex = moveIndex,
+                                enemyTarget = enemyTarget,
+                                isBestMove = moveId == bestMoveId,
+                                isRecommended = pokemonBuild?.recommendedMoves?.contains(PokemonData.getMoveName(moveId)) == true
                             )
                         }
                     }
@@ -740,18 +1185,43 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
 }
 
 @Composable
-fun MoveItem(mon: PartyMon, moveId: Int, enemyTarget: PartyMon?) {
+fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?, isBestMove: Boolean = false, isRecommended: Boolean = false) {
     val moveName = PokemonData.getMoveName(moveId)
     val moveData = PokemonData.getMoveData(moveId)
+    val pp = mon.movePP.getOrNull(moveIndex) ?: 0
 
     if (moveData == null || moveData.power == 0) {
         // Status move or unknown move
-        Text(
-            text = "• $moveName",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(vertical = 2.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "• $moveName",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+                if (isRecommended) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("✓", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                }
+            }
+            if (pp > 0) {
+                Text(
+                    text = "PP: $pp",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when {
+                        pp <= 5 -> Color(0xFFF44336)
+                        pp <= 10 -> Color(0xFFFFEB3B)
+                        else -> Color.Gray
+                    },
+                    fontSize = 9.sp
+                )
+            }
+        }
         return
     }
 
@@ -801,34 +1271,65 @@ fun MoveItem(mon: PartyMon, moveId: Int, enemyTarget: PartyMon?) {
         "No damage"
     }
 
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        color = if (isBestMove) Color(0xFF1A3A1A) else Color.Transparent,
+        shape = RoundedCornerShape(6.dp)
     ) {
-        Text(
-            text = "• $moveName",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = damageText,
-                style = MaterialTheme.typography.bodySmall,
-                fontSize = 10.sp,
-                color = effectColor,
-                fontWeight = if (result.effectiveness > 1f) FontWeight.Bold else FontWeight.Normal
-            )
-            if (result.effectLabel.isNotEmpty()) {
+        Row(
+            modifier = Modifier.padding(horizontal = if (isBestMove) 8.dp else 0.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Text(
-                    text = result.effectLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
-                    color = effectColor
+                    text = if (isBestMove) "⭐ $moveName" else "• $moveName",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isBestMove) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = if (isBestMove) FontWeight.Bold else FontWeight.Normal
                 )
+                if (isRecommended) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("✓", fontSize = 10.sp, color = Color(0xFF4CAF50))
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = damageText,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 10.sp,
+                        color = effectColor,
+                        fontWeight = if (result.effectiveness > 1f || isBestMove) FontWeight.Bold else FontWeight.Normal
+                    )
+                    if (result.wouldKO) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "💀", fontSize = 10.sp)
+                    }
+                }
+                // PP display
+                if (pp > 0) {
+                    Text(
+                        text = "PP: $pp",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when {
+                            pp <= 5 -> Color(0xFFF44336)
+                            pp <= 10 -> Color(0xFFFFEB3B)
+                            else -> Color(0xFF888888)
+                        },
+                        fontSize = 8.sp
+                    )
+                }
+                if (result.effectLabel.isNotEmpty()) {
+                    Text(
+                        text = result.effectLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = effectColor
+                    )
+                }
             }
         }
     }
@@ -977,5 +1478,155 @@ fun DebugPanel(
                 }
             }
         }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Helper Composables for Enhanced Features
+// ══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+fun TypeBadge(typeId: Int, modifier: Modifier = Modifier) {
+    val (typeName, typeColor, typeEmoji) = getTypeInfo(typeId)
+
+    Surface(
+        modifier = modifier,
+        color = typeColor,
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = typeEmoji,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(end = 2.dp)
+            )
+            Text(
+                text = typeName,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+fun SpeedComparisonIndicator(playerSpeed: Int, enemySpeed: Int) {
+    val (text, color, icon) = when {
+        playerSpeed > enemySpeed -> Triple("Faster +${playerSpeed - enemySpeed}", Color(0xFF4CAF50), "⚡")
+        playerSpeed < enemySpeed -> Triple("Slower -${enemySpeed - playerSpeed}", Color(0xFFFF6B6B), "🐌")
+        else -> Triple("Speed Tie", Color(0xFFFF9800), "⚖")
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        Text(text = icon, fontSize = 12.sp)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+    }
+}
+
+@Composable
+fun StatStageIndicator(stages: List<Int>) {
+    // Stages: [ATK, DEF, SPD, SPA, SPD, ACC, EVA, ...]
+    // Baseline is 6, so stages[i] - 6 = actual modifier
+    val statNames = listOf("ATK", "DEF", "SPD", "SPA", "SPD")
+    val relevantStages = stages.take(5)
+
+    val modifiedStats = relevantStages.mapIndexed { idx, stage ->
+        val modifier = stage - 6
+        if (modifier != 0) statNames[idx] to modifier else null
+    }.filterNotNull()
+
+    if (modifiedStats.isNotEmpty()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(vertical = 2.dp)
+        ) {
+            modifiedStats.forEach { (stat, mod) ->
+                val color = if (mod > 0) Color(0xFF4CAF50) else Color(0xFFFF6B6B)
+                val sign = if (mod > 0) "+" else ""
+                Surface(
+                    color = color.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = "$stat$sign$mod",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = color,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KOIndicator(damagePercent: Int, currentHp: Int, maxHp: Int) {
+    val hpPercent = if (maxHp > 0) (currentHp * 100 / maxHp) else 0
+
+    when {
+        damagePercent >= hpPercent -> {
+            // OHKO
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "💀", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "OHKO!",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFF0000)
+                )
+            }
+        }
+        damagePercent * 2 >= hpPercent -> {
+            // 2HKO
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "⚠️", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "2HKO",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF9800)
+                )
+            }
+        }
+    }
+}
+
+private fun getTypeInfo(typeId: Int): Triple<String, Color, String> {
+    return when (typeId) {
+        0 -> Triple("Normal", Color(0xFFA8A878), "⚪")
+        1 -> Triple("Fighting", Color(0xFFC03028), "👊")
+        2 -> Triple("Flying", Color(0xFFA890F0), "🦅")
+        3 -> Triple("Poison", Color(0xFFA040A0), "☠️")
+        4 -> Triple("Ground", Color(0xFFE0C068), "🪨")
+        5 -> Triple("Rock", Color(0xFFB8A038), "🗿")
+        6 -> Triple("Bug", Color(0xFFA8B820), "🐛")
+        7 -> Triple("Ghost", Color(0xFF705898), "👻")
+        8 -> Triple("Steel", Color(0xFFB8B8D0), "⚙️")
+        9 -> Triple("Fire", Color(0xFFF08030), "🔥")
+        10 -> Triple("Water", Color(0xFF6890F0), "💧")
+        11 -> Triple("Grass", Color(0xFF78C850), "🌿")
+        12 -> Triple("Electric", Color(0xFFF8D030), "⚡")
+        13 -> Triple("Psychic", Color(0xFFF85888), "🔮")
+        14 -> Triple("Ice", Color(0xFF98D8D8), "❄️")
+        15 -> Triple("Dragon", Color(0xFF7038F8), "🐉")
+        16 -> Triple("Dark", Color(0xFF705848), "🌙")
+        17 -> Triple("Fairy", Color(0xFFEE99AC), "✨")
+        else -> Triple("???", Color.Gray, "❓")
     }
 }

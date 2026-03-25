@@ -70,7 +70,14 @@ object DamageCalculator {
         targetMaxHP: Int,
         isBurned: Boolean = false,
         weather: Int = 0,   // 0 = none, could extend for weather
-        moveName: String = "Unknown"
+        moveName: String = "Unknown",
+        attackerItem: Int = 0,
+        defenderItem: Int = 0,
+        attackerHp: Int = -1,
+        attackerMaxHp: Int = -1,
+        isSuperEffective: Boolean = false,
+        attackerAbility: Int = 0,
+        defenderAbility: Int = 0
     ): DamageResult {
         // Status moves or moves with 0 power
         if (movePower == 0 || defenseStat <= 0 || attackStat <= 0 || attackerLevel <= 0) {
@@ -87,19 +94,69 @@ object DamageCalculator {
             )
         }
 
+        // Check defender ability for type immunity (Levitate, Flash Fire, etc.)
+        if (com.ercompanion.data.AbilityData.grantsImmunity(defenderAbility, moveType)) {
+            return DamageResult(
+                moveName = moveName,
+                minDamage = 0,
+                maxDamage = 0,
+                effectiveness = 0f,
+                effectLabel = "No effect (${com.ercompanion.data.AbilityData.getAbilityName(defenderAbility)})",
+                percentMin = 0,
+                percentMax = 0,
+                isStab = false,
+                wouldKO = false
+            )
+        }
+
+        // Apply attacker's held item stat modifiers
+        val attackerItemEffect = com.ercompanion.data.ItemData.getItemEffect(attackerItem)
+        var modifiedAttackStat = attackStat
+        if (attackerItemEffect != null) {
+            // Apply stat modifiers (Choice Band/Specs, Muscle Band, Wise Glasses, etc.)
+            val statMods = com.ercompanion.data.ItemData.applyItemToStats(
+                attack = attackStat,
+                defense = 0,
+                spAttack = attackStat,
+                spDefense = 0,
+                speed = 0,
+                itemId = attackerItem,
+                currentHp = attackerHp,
+                maxHp = attackerMaxHp
+            )
+            // Use the appropriate stat based on move category (simplified - assumes attack stat passed is correct)
+            modifiedAttackStat = maxOf(statMods.attack, statMods.spAttack)
+        }
+
+        // Apply defender's held item stat modifiers
+        val defenderItemEffect = com.ercompanion.data.ItemData.getItemEffect(defenderItem)
+        var modifiedDefenseStat = defenseStat
+        if (defenderItemEffect != null) {
+            val statMods = com.ercompanion.data.ItemData.applyItemToStats(
+                attack = 0,
+                defense = defenseStat,
+                spAttack = 0,
+                spDefense = defenseStat,
+                speed = 0,
+                itemId = defenderItem
+            )
+            modifiedDefenseStat = maxOf(statMods.defense, statMods.spDefense)
+        }
+
         // Base damage calculation: power * attack * (2 * level / 5 + 2) / defense / 50 + 2
         val levelMod = (2 * attackerLevel / 5 + 2)
-        var baseDamage = (movePower.toLong() * attackStat * levelMod / defenseStat / 50 + 2).toInt()
+        var baseDamage = (movePower.toLong() * modifiedAttackStat * levelMod / modifiedDefenseStat / 50 + 2).toInt()
 
-        // Apply burn (0.5x if physical and burned, unless Guts - we don't track abilities yet)
-        if (isBurned) {
+        // Apply burn (0.5x if physical and burned, unless Guts ability)
+        if (isBurned && attackerAbility != 62) {  // 62 = Guts
             baseDamage = (baseDamage * 0.5f).toInt()
         }
 
-        // STAB (1.5x if move type matches any attacker type)
+        // STAB (normally 1.5x, but Adaptability makes it 2x)
         val isStab = attackerTypes.contains(moveType)
         if (isStab) {
-            baseDamage = (baseDamage * 1.5f).toInt()
+            val stabMultiplier = com.ercompanion.data.AbilityData.getStabMultiplier(attackerAbility)
+            baseDamage = (baseDamage * stabMultiplier).toInt()
         }
 
         // Type effectiveness (multiply by effectiveness against each defender type)
@@ -110,7 +167,44 @@ object DamageCalculator {
             }
         }
 
-        val effectiveBaseDamage = (baseDamage * effectiveness).toInt()
+        var effectiveBaseDamage = (baseDamage * effectiveness).toInt()
+
+        // Apply attacker ability damage multipliers (Sheer Force, Technician, pinch abilities)
+        val abilityDamageMod = com.ercompanion.data.AbilityData.getDamageMultiplier(
+            abilityId = attackerAbility,
+            movePower = movePower,
+            moveType = moveType,
+            attackerTypes = attackerTypes,
+            currentHp = attackerHp,
+            maxHp = attackerMaxHp
+        )
+        if (abilityDamageMod > 1.0f) {
+            effectiveBaseDamage = (effectiveBaseDamage * abilityDamageMod).toInt()
+        }
+
+        // Apply defender ability defensive multipliers (Thick Fat)
+        val defensiveAbilityMod = com.ercompanion.data.AbilityData.getDefensiveMultiplier(defenderAbility, moveType)
+        if (defensiveAbilityMod != 1.0f) {
+            effectiveBaseDamage = (effectiveBaseDamage * defensiveAbilityMod).toInt()
+        }
+
+        // Apply attacker's held item damage multipliers
+        if (attackerItemEffect != null) {
+            // Life Orb: 1.3x all damage
+            if (attackerItemEffect.damageMod > 1.0f) {
+                effectiveBaseDamage = (effectiveBaseDamage * attackerItemEffect.damageMod).toInt()
+            }
+
+            // Expert Belt: 1.2x on super effective (only if effectiveness > 1)
+            if (attackerItemEffect.name == "Expert Belt" && effectiveness > 1.0f) {
+                effectiveBaseDamage = (effectiveBaseDamage * 1.2f).toInt()
+            }
+
+            // Type plates: 1.2x for specific move type
+            if (attackerItemEffect.typeBoostedMove == moveType && attackerItemEffect.typeBoostMultiplier > 1.0f) {
+                effectiveBaseDamage = (effectiveBaseDamage * attackerItemEffect.typeBoostMultiplier).toInt()
+            }
+        }
 
         // Random factor: 85-100%
         val minDamage = max(1, (effectiveBaseDamage * 0.85f).toInt())

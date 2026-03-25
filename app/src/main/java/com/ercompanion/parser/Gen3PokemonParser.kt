@@ -17,6 +17,17 @@ data class PartyMon(
     val spDefense: Int,
     val experience: Int,
     val friendship: Int,
+    val heldItem: Int = 0,
+    val ability: Int = 0,
+    val personality: UInt = 0u,
+    val ivHp: Int = 0,
+    val ivAttack: Int = 0,
+    val ivDefense: Int = 0,
+    val ivSpeed: Int = 0,
+    val ivSpAttack: Int = 0,
+    val ivSpDefense: Int = 0,
+    val status: Int = 0,        // Status condition flags
+    val movePP: List<Int> = listOf(0, 0, 0, 0),  // PP for each move
     val otId: Long = 0L
 )
 
@@ -95,13 +106,28 @@ object Gen3PokemonParser {
 
         // Parse substructure A: species, item, experience, friendship
         val species = readU16(substructures[0], 0)
+        val heldItem = readU16(substructures[0], 2)
         val experience = readU32(substructures[0], 4)
         val friendship = readU8(substructures[0], 9)
 
-        // Parse substructure B: moves (4 moves, 2 bytes each)
+        // Parse substructure B: moves (4 moves, 2 bytes each) and PP (4 bytes at offset +8)
         val moves = (0 until 4).map { readU16(substructures[1], it * 2) }
+        val movePP = (0 until 4).map { readU8(substructures[1], 8 + it) }
+
+        // Parse substructure C (EVs/IVs): IVs are packed in 32-bit value at offset 0
+        val ivData = readU32(substructures[2], 0)
+        val ivHp = ((ivData shr 0) and 0x1Fu).toInt()
+        val ivAttack = ((ivData shr 5) and 0x1Fu).toInt()
+        val ivDefense = ((ivData shr 10) and 0x1Fu).toInt()
+        val ivSpeed = ((ivData shr 15) and 0x1Fu).toInt()
+        val ivSpAttack = ((ivData shr 20) and 0x1Fu).toInt()
+        val ivSpDefense = ((ivData shr 25) and 0x1Fu).toInt()
+
+        // Parse substructure D (Misc): ability at offset +1
+        val ability = readU8(substructures[3], 1)
 
         // Read Pokemon extra fields (after BoxPokemon, offset 0x50)
+        val status = readU32(data, 0x50).toInt()
         val level = readU8(data, 0x54)
         val hp = readU16(data, 0x56)
         val maxHp = readU16(data, 0x58)
@@ -130,6 +156,17 @@ object Gen3PokemonParser {
             spDefense = spDefense,
             experience = experience.toInt(),
             friendship = friendship,
+            heldItem = heldItem,
+            ability = ability,
+            personality = personality,
+            ivHp = ivHp,
+            ivAttack = ivAttack,
+            ivDefense = ivDefense,
+            ivSpeed = ivSpeed,
+            ivSpAttack = ivSpAttack,
+            ivSpDefense = ivSpDefense,
+            status = status,
+            movePP = movePP,
             otId = otId.toLong() and 0xFFFFFFFFL
         )
     }

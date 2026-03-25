@@ -25,54 +25,43 @@ class AddressScanner(
         private const val MAX_PARTY_SIZE = 6
         private const val PARTY_STRUCT_SIZE = POKEMON_SIZE * MAX_PARTY_SIZE // 624 bytes
 
-        // Known approximate addresses from vanilla Emerald (starting hints)
+        // Known addresses for Emerald Rogue
+        // Note: gPlayerPartyCount at 0x0203777C is unreliable (can be 0)
+        // Use 0x02037780 as the party start address
         private val KNOWN_ADDRESSES = listOf(
-            0x020244ECL, // Player party count (approx)
-            0x020244F0L  // Player party start (approx)
+            0x0203777CL, // gPlayerPartyCount (unreliable, but marks start)
+            0x02037780L  // gPlayerParty - ALWAYS use this address
         )
     }
 
     suspend fun findPartyAddress(): Pair<Long, Long>? = withContext(Dispatchers.IO) {
-        // Check if we already have a cached address
-        val cachedCountAddr = prefs.getLong(KEY_PARTY_COUNT_ADDRESS, 0L)
-        val cachedPartyAddr = prefs.getLong(KEY_PARTY_ADDRESS, 0L)
+        // Emerald Rogue uses fixed addresses: gPlayerParty at 0x02037780
+        // gPlayerPartyCount at 0x0203777C is unreliable (can be 0), so we ignore it.
+        val partyCountAddr = 0x0203777CL
+        val partyAddr = 0x02037780L
 
-        if (cachedCountAddr != 0L && cachedPartyAddr != 0L) {
-            // Verify the cached address is still valid
-            if (verifyPartyAddress(cachedCountAddr, cachedPartyAddr)) {
-                return@withContext Pair(cachedCountAddr, cachedPartyAddr)
-            }
+        // Verify the address has valid data
+        if (verifyPartyAddress(partyCountAddr, partyAddr)) {
+            saveAddresses(partyCountAddr, partyAddr)
+            return@withContext Pair(partyCountAddr, partyAddr)
         }
 
-        // Try known addresses first
-        for (knownAddr in KNOWN_ADDRESSES) {
-            if (verifyPartyAddress(knownAddr, knownAddr + 4)) {
-                saveAddresses(knownAddr, knownAddr + 4)
-                return@withContext Pair(knownAddr, knownAddr + 4)
-            }
-        }
-
-        // Full scan of EWRAM (this is slow, ~5-10 seconds)
-        val result = scanEWRAM()
-        if (result != null) {
-            saveAddresses(result.first, result.second)
-            return@withContext result
-        }
-
+        // If verification failed, something is very wrong
         null
     }
 
     private suspend fun verifyPartyAddress(countAddr: Long, partyAddr: Long): Boolean {
-        val countData = client.readMemory(countAddr, 1) ?: return false
-        val partyCount = countData[0].toInt() and 0xFF
+        // Note: In ER mocha, gPlayerPartyCount is unreliable (can be 0).
+        // Just verify we can read a valid Pokemon from the party address.
 
-        if (partyCount !in 1..MAX_PARTY_SIZE) return false
-
-        // Read first Pokemon to verify
+        // Read first Pokemon slot
         val firstMonData = client.readMemory(partyAddr, POKEMON_SIZE) ?: return false
         val firstMon = Gen3PokemonParser.parsePokemon(firstMonData)
 
-        return firstMon != null
+        // Valid if we got a Pokemon with reasonable stats
+        if (firstMon == null) return false
+
+        return firstMon.species in 1..1526 && firstMon.level in 1..100
     }
 
     private suspend fun scanEWRAM(): Pair<Long, Long>? {
@@ -112,8 +101,8 @@ class AddressScanner(
         val firstMonData = data.sliceArray(startOffset until startOffset + POKEMON_SIZE)
         val firstMon = Gen3PokemonParser.parsePokemon(firstMonData) ?: return false
 
-        // Basic validation
-        if (firstMon.species !in 1..412 || firstMon.level !in 1..100) {
+        // Basic validation (Emerald Rogue has up to 1526 species)
+        if (firstMon.species !in 1..1526 || firstMon.level !in 1..100) {
             return false
         }
 
@@ -124,7 +113,7 @@ class AddressScanner(
             )
             val secondMon = Gen3PokemonParser.parsePokemon(secondMonData) ?: return false
 
-            if (secondMon.species !in 1..412 || secondMon.level !in 1..100) {
+            if (secondMon.species !in 1..1526 || secondMon.level !in 1..100) {
                 return false
             }
         }

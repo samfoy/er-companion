@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         val viewModel: MainViewModel = viewModel()
                         val connectionState by viewModel.connectionState.collectAsState()
+                        val dataSource by viewModel.dataSource.collectAsState()
                         val partyState by viewModel.partyState.collectAsState()
                         val enemyPartyState by viewModel.enemyPartyState.collectAsState()
                         val activePlayerSlot by viewModel.activePlayerSlot.collectAsState()
@@ -112,6 +113,7 @@ class MainActivity : ComponentActivity() {
                         MainScreen(
                             viewModel = viewModel,
                             connectionState = connectionState,
+                            dataSource = dataSource,
                             partyState = partyState,
                             enemyPartyState = enemyPartyState,
                             activePlayerSlot = activePlayerSlot,
