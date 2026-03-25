@@ -10,12 +10,11 @@ import java.util.zip.Inflater
 class SaveStateReader(private val context: Context) {
 
     companion object {
-        const val MGBA_STATE_SIZE = 0x50000L   // 327,680 bytes — conservative min (actual is ~396KB-540KB)
+        const val MGBA_STATE_SIZE = 0x50000L   // conservative min
         const val EWRAM_OFFSET    = 0x21000L
-        const val PARTY_COUNT_ADDR = 0x020244ECL
-        const val PARTY_DATA_ADDR  = 0x020244F0L
-        val PARTY_COUNT_FILE_OFFSET = EWRAM_OFFSET + (PARTY_COUNT_ADDR - 0x02000000L)
-        val PARTY_DATA_FILE_OFFSET  = EWRAM_OFFSET + (PARTY_DATA_ADDR - 0x02000000L)
+        // ER-specific: gPlayerParty found at EWRAM+0x37780 (GBA: 0x02037780)
+        // gPlayerPartyCount at EWRAM+0x3777c (GBA: 0x0203777c)
+        // These differ from vanilla Emerald (0x020244F0) due to ER's extra EWRAM data
 
         // zlib magic bytes
         private val ZLIB_MAGIC = byteArrayOf(0x78.toByte(), 0x9C.toByte())
@@ -240,56 +239,69 @@ class SaveStateReader(private val context: Context) {
         return true
     }
 
-    private fun tryReadPartyAt(ewram: ByteArray, offset: Int): Pair<Int, ByteArray>? {
-        // offset here is the START of the party array (not the count byte)
-        if (offset < 0 || offset + 624 > ewram.size) return null
+    private fun tryReadPartyAt(ewram: ByteArray, countOffset: Int): Pair<Int, ByteArray>? {
+        // countOffset = position of gPlayerPartyCount byte
+        // gPlayerParty starts at countOffset+4 (confirmed from ER state analysis)
+        if (countOffset < 0 || countOffset + 4 + 624 > ewram.size) return null
+        val count = ewram[countOffset].toInt() and 0xFF
+        if (count !in 1..6) return null
 
-        val partyBytes = ewram.copyOfRange(offset, offset + 624)
+        val partyStart = countOffset + 4
+        val partyBytes = ewram.copyOfRange(partyStart, partyStart + 624)
 
-        // Count valid consecutive mons from slot 0
-        var count = 0
-        for (i in 0..5) {
-            if (isValidMon(partyBytes, i * 104)) count++ else break
+        var validCount = 0
+        for (i in 0 until count) {
+            if (!isValidMon(partyBytes, i * 104)) return null
+            validCount++
         }
-        if (count == 0) return null
-
         return Pair(count, partyBytes)
     }
 
     private fun scanForParty(ewram: ByteArray): Int {
-        // Scan for the START of the party array (gPlayerParty), not the count byte
-        // Look for N consecutive valid 104-byte Pokemon structs
-        val searchEnd = ewram.size - 624
-        var i = 0
-        while (i < searchEnd) {
-            val result = tryReadPartyAt(ewram, i)
-            if (result != null && result.first >= 1) return i
-            i += 4
+        // Known ER party location: EWRAM+0x37780 (confirmed from state file analysis)
+        // Scan outward from there first, then fall back to full scan
+        val knownHint = 0x37780
+        val scanRanges = listOf(
+            knownHint - 0x2000 to knownHint + 0x2000,  // near known address first
+            0 to ewram.size - 624                        // full scan fallback
+        )
+        for ((start, end) in scanRanges) {
+            var i = maxOf(0, start)
+            val limit = minOf(end, ewram.size - 624)
+            while (i <= limit) {
+                val result = tryReadPartyAt(ewram, i)
+                if (result != null && result.first >= 1) return i
+                i += 4
+            }
         }
         return -1
     }
 
     private fun decompressIfNeeded(data: ByteArray): ByteArray? {
-        if (data.size < 4) return null
+        if (data.size < 8) return null
+
+        // RASTATE\x01 — RetroArch's chunk wrapper around the raw core state
+        if (data[0] == 'R'.code.toByte() && data[1] == 'A'.code.toByte() &&
+            data[2] == 'S'.code.toByte() && data[3] == 'T'.code.toByte() &&
+            data[4] == 'A'.code.toByte() && data[5] == 'T'.code.toByte() &&
+            data[6] == 'E'.code.toByte()) {
+            lastStatus = "RASTATE format detected"
+            return parseRAState(data)
+        }
 
         // Already raw mGBA state?
         if (data.size >= MGBA_STATE_SIZE && isRawMgbaState(data)) {
+            lastStatus = "Raw mGBA state"
             return data
         }
 
-        // RetroArch RZIP format: magic "#RZIPv1#" (bytes: 35 82 90 73 80 118 1 35)
+        // RetroArch RZIP format: magic "#RZIPv1#"
         if (data.size >= 20 &&
             data[0] == 35.toByte() && data[1] == 82.toByte() &&
             data[2] == 90.toByte() && data[3] == 73.toByte() &&
             data[4] == 80.toByte() && data[5] == 118.toByte() &&
             data[7] == 35.toByte()) {
             return tryRzipDecompress(data)
-        }
-
-        // Large raw file that might be an mGBA state without magic match
-        if (data.size >= MGBA_STATE_SIZE) {
-            lastStatus = "Large unrecognized format (${data.size} bytes) — trying as raw"
-            return data
         }
 
         // Standard zlib
@@ -302,6 +314,35 @@ class SaveStateReader(private val context: Context) {
             tryGzipDecompress(data)?.let { return it }
         }
 
+        // Large unrecognized — try as raw
+        if (data.size >= MGBA_STATE_SIZE) {
+            lastStatus = "Unknown format (${data.size}B) — trying as raw"
+            return data
+        }
+
+        lastStatus = "Unknown format size=${data.size} magic=${data[0].toInt() and 0xFF} ${data[1].toInt() and 0xFF} ${data[2].toInt() and 0xFF} ${data[3].toInt() and 0xFF}"
+        return null
+    }
+
+    private fun parseRAState(data: ByteArray): ByteArray? {
+        // RASTATE\x01 + chunks: each chunk = 4-byte tag + 4-byte LE size + data
+        var pos = 8
+        while (pos + 8 <= data.size) {
+            val tag = String(data, pos, 4, Charsets.US_ASCII).trim()
+            val size = ((data[pos+4].toLong() and 0xFF)) or
+                       ((data[pos+5].toLong() and 0xFF) shl 8) or
+                       ((data[pos+6].toLong() and 0xFF) shl 16) or
+                       ((data[pos+7].toLong() and 0xFF) shl 24)
+            pos += 8
+            if (size < 0 || pos + size > data.size) break
+            if (tag == "MEM") {
+                lastStatus = "RASTATE MEM: ${size}B"
+                return data.copyOfRange(pos, pos + size.toInt())
+            }
+            if (tag == "END") break
+            pos += size.toInt()
+        }
+        lastStatus = "RASTATE: no MEM chunk found"
         return null
     }
 
