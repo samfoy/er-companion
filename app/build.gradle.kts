@@ -11,8 +11,8 @@ android {
         applicationId = "com.ercompanion"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 21
+        versionName = "0.3.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
