@@ -299,7 +299,7 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?) {
                         bestDmgPct >= 50  -> HPYellow
                         else              -> Color.Gray
                     }
-                    Text("⚔ ${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
+                    Text("best move: ${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
                 }
             }
         }
