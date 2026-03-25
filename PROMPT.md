@@ -1,201 +1,187 @@
-# ER Companion App — Android Proof of Concept
+# ER Companion App — v0.2: Sprites, Damage Calcs, Recommended Builds
 
-## Project Overview
+## Context
 
-Build an Android companion app for **Pokémon Emerald Rogue** running on an **AYN Thor** dual-screen handheld gaming device. The app runs on the **bottom screen** while mGBA/RetroArch runs on the top screen.
+This is a continuation of v0.1 which is already built and compiles successfully. The APK exists at `app/build/outputs/apk/debug/app-debug.apk`. Do NOT rewrite the project from scratch — incrementally improve it.
 
-## Tech Stack
+## Current State
 
-- **Language:** Kotlin
-- **UI:** Jetpack Compose
-- **Min SDK:** Android 8.0 (API 26)
-- **Target SDK:** Android 14 (API 34)
-- **Build:** Gradle with Kotlin DSL
+All source files exist and compile:
+- `network/RetroArchClient.kt` — UDP socket client for RetroArch network commands
+- `parser/Gen3PokemonParser.kt` — BoxPokémon decryption + party parsing
+- `parser/AddressScanner.kt` — runtime EWRAM address scanner
+- `data/PokemonData.kt` — species/move name maps
+- `ui/MainScreen.kt` — Jetpack Compose dark UI, party panel
+- `MainViewModel.kt` — StateFlow MVVM
+- `MainActivity.kt` — entry point
+- `gradle.properties` already has `android.useAndroidX=true` and `android.enableJetifier=true`
+- `local.properties` points to `sdk.dir=/opt/homebrew/share/android-commandlinetools`
 
-## Communication
+## What to Build in v0.2
 
-**RetroArch Network Commands** — UDP on `localhost:55355`
+### 1. Pokémon Sprites
 
-The app sends UDP commands to RetroArch (which runs the mGBA core) to read GBA memory:
+**Source:** `https://raw.githubusercontent.com/DepressoMocha/emerogue/moka-dev/graphics/pokemon/<name>/icon.png`
 
+- Pokemon names in the URL are lowercase, e.g. `bulbasaur`, `charizard`, `mr-mime`
+- Icon sprites are small (~32x32px), perfect for party panel
+- Bundle a script to download sprites at build time, OR fetch at runtime and cache in app's files dir
+- **Preferred: runtime fetch + disk cache** (keeps APK small, ER has 1000+ species)
+  - On first load: fetch from GitHub raw URL, save to `filesDir/sprites/<name>.png`
+  - Display with Coil (async image loading library)
+  - Show a Poké Ball placeholder while loading
+
+**Add Coil dependency** to `app/build.gradle.kts`:
+```kotlin
+implementation("io.coil-kt:coil-compose:2.5.0")
 ```
-READ_CORE_MEMORY <hex_address> <num_bytes>
+
+**Species name → URL slug mapping** — most names just lowercase, but handle edge cases:
+- `nidoran-f` → `nidoran-f`
+- `nidoran-m` → `nidoran-m`
+- `mr-mime` → `mr-mime`
+- `mime-jr` → `mime-jr`
+- `farfetchd` → `farfetchd`
+- Use the species name from `PokemonData.kt` lowercased and hyphenated
+
+### 2. Damage Calculator (Gen5+ formula — confirmed from ER source)
+
+The formula from `src/battle_util.c` in the DepressoMocha emerogue repo:
+
+```c
+// CalculateBaseDamage:
+dmg = power * userFinalAttack * (2 * level / 5 + 2) / targetFinalDefense / 50 + 2
+
+// Then modifiers applied in order:
+// 1. Target modifier (0.75x if multi-target move)
+// 2. Weather (1.5x for sun/rain boosted moves, 0.5x for weakened)
+// 3. Critical hit (1.5x)
+// 4. Random factor (85–100%)
+// 5. STAB (1.5x, or 2.0x with Adaptability)
+// 6. Type effectiveness (0x, 0.25x, 0.5x, 1x, 2x, 4x)
+// 7. Burn (0.5x if attacker is burned and using physical move, unless Guts)
 ```
 
-RetroArch responds with:
-```
-READ_CORE_MEMORY <hex_address> <hex_byte1> <hex_byte2> ...
-```
-
-Enable in RetroArch settings: `Settings > Network > Network Commands = ON`
-
-## GBA Memory Layout (Emerald base — pret/pokeemerald / DepressoMocha emerogue)
-
-GBA EWRAM starts at `0x02000000`. Key addresses (confirmed from source):
+**Implement `DamageCalculator.kt`:**
 
 ```kotlin
-// These are APPROXIMATE — need to be confirmed from build .map file
-// or via runtime scanner. The app should scan to find them.
-const val EWRAM_BASE = 0x02000000L
-
-// Party data — scan for these
-// struct Pokemon = 104 bytes each, 6 slots
-// gPlayerPartyCount: 1 byte
-// gPlayerParty: 6 x Pokemon structs (624 bytes total)
-// gEnemyPartyCount: 1 byte  
-// gEnemyParty: 6 x Pokemon structs
-
-// Known Emerald approximate offsets (verify at runtime):
-const val PLAYER_PARTY_COUNT_APPROX = 0x020244ECL // adjust based on scan
-const val PLAYER_PARTY_APPROX = 0x020244F0L       // adjust based on scan
-```
-
-### Pokemon Struct Layout (104 bytes)
-
-```kotlin
-// struct BoxPokemon (80 bytes) — encrypted substructures
-// offset 0x00: personality (u32) — encryption seed part 1
-// offset 0x04: otId (u32) — encryption seed part 2
-// offset 0x08: nickname (10 bytes)
-// offset 0x12: language (u8, 3 bits)
-// ... encrypted substructures (4 x 12 bytes = 48 bytes)
-//     order determined by personality % 24
-//     each decrypted with key = personality XOR otId
-//     substructure A: species, item, experience, friendship
-//     substructure B: moves (4 x move ID + PP)
-//     substructure C: EVs, condition
-//     substructure D: IVs, ribbons, ability, nature (bits)
-
-// struct Pokemon extra fields (after BoxPokemon, offset 0x50):
-// offset 0x50: status (u32)
-// offset 0x54: level (u8)
-// offset 0x55: mail (u8)
-// offset 0x56: hp (u16)
-// offset 0x58: maxHP (u16)
-// offset 0x5A: attack (u16)
-// offset 0x5C: defense (u16)
-// offset 0x5E: speed (u16)
-// offset 0x60: spAttack (u16)
-// offset 0x62: spDefense (u16)
-// Total: 104 bytes confirmed by STATIC_ASSERT in source
-```
-
-### Substructure Order
-
-The order of the 4 substructures (ABCD) is determined by `personality % 24`. Use this lookup:
-
-```kotlin
-val SUBSTRUCTURE_ORDER = arrayOf(
-    intArrayOf(0,1,2,3), intArrayOf(0,1,3,2), intArrayOf(0,2,1,3),
-    intArrayOf(0,3,1,2), intArrayOf(0,2,3,1), intArrayOf(0,3,2,1),
-    intArrayOf(1,0,2,3), intArrayOf(1,0,3,2), intArrayOf(2,0,1,3),
-    intArrayOf(3,0,1,2), intArrayOf(2,0,3,1), intArrayOf(3,0,2,1),
-    intArrayOf(1,2,0,3), intArrayOf(1,3,0,2), intArrayOf(2,1,0,3),
-    intArrayOf(3,1,0,2), intArrayOf(2,3,0,1), intArrayOf(3,2,0,1),
-    intArrayOf(1,2,3,0), intArrayOf(1,3,2,0), intArrayOf(2,1,3,0),
-    intArrayOf(3,1,2,0), intArrayOf(2,3,1,0), intArrayOf(3,2,1,0),
+data class DamageResult(
+    val moveName: String,
+    val minDamage: Int,       // at 85% roll
+    val maxDamage: Int,       // at 100% roll
+    val effectiveness: Float, // 0.0, 0.25, 0.5, 1.0, 2.0, 4.0
+    val effectLabel: String,  // "", "Not very effective", "Super effective!", "No effect"
+    val percentMin: Int,      // min as % of target maxHP
+    val percentMax: Int,      // max as % of target maxHP
+    val isStab: Boolean,
+    val wouldKO: Boolean,     // percentMax >= 100
 )
+
+object DamageCalculator {
+    fun calc(
+        attackerLevel: Int,
+        attackStat: Int,    // atk or spAtk depending on move category
+        defenseStat: Int,   // def or spDef depending on move category
+        movePower: Int,
+        moveType: Int,      // type ID
+        attackerTypes: List<Int>,
+        defenderTypes: List<Int>,
+        targetMaxHP: Int,
+        targetCurrentHP: Int,
+        isBurned: Boolean = false,
+        weather: Int = 0,   // 0 = none
+    ): DamageResult
+}
 ```
 
-Decrypt each 12-byte substructure by XORing 32-bit words with `personality XOR otId`.
+**Type effectiveness table** — use the modern (Gen6+) chart ER uses:
+- All 18 types × 18 types
+- Include Fairy type
+- Hardcode as a 2D array of floats
 
-## Runtime Address Scanner
+**Move data** — expand `PokemonData.kt` to include for each move:
+- `power: Int` (0 for status moves)
+- `type: Int` (type ID)
+- `category: Int` (0=physical, 1=special, 2=status)
 
-Since exact EWRAM offsets vary by build, implement a scanner:
-
-1. Read 624KB of EWRAM starting at `0x02000000`
-2. Walk through 4-byte aligned positions
-3. At each position, check if it looks like a valid party count (value 1-6)
-4. Then check if the next 104 bytes look like a valid Pokémon struct:
-   - personality != 0
-   - After decryption, species ID in range 1-412 (Gen3 national dex)
-   - Level in range 1-100
-5. Confirm by checking all party slots are consistent
-6. Cache the found offset
-
-## What to Build
-
-### Phase 1 — Proof of Concept (this task)
-
-Build a minimal but working Android app:
-
-1. **`RetroArchClient.kt`** — UDP socket client
-   - `connect(host: String = "127.0.0.1", port: Int = 55355)`
-   - `readMemory(address: Long, numBytes: Int): ByteArray?`
-   - `getStatus(): String?`
-   - Handle timeouts gracefully (RetroArch may not be running)
-   - Poll every 500ms via coroutine
-
-2. **`Gen3PokemonParser.kt`** — parse raw bytes into data classes
-   - `data class PartyMon(val species: Int, val level: Int, val hp: Int, val maxHp: Int, val nickname: String, val moves: List<Int>)`
-   - Implement the BoxPokemon decryption (personality XOR otId, substructure reorder)
-   - Map species IDs to names (include a hardcoded map for Gen1-3 species, ~412 entries)
-   - Map move IDs to names (include top 50 most common moves at minimum)
-
-3. **`AddressScanner.kt`** — find party address at runtime
-   - Read chunks of EWRAM and locate gPlayerParty
-   - Cache result in SharedPreferences
-   - Include known approximate addresses as starting hints
-
-4. **`MainViewModel.kt`** — state management
-   - Hold `partyState: StateFlow<List<PartyMon>>`
-   - Hold `connectionState: StateFlow<ConnectionState>` (DISCONNECTED/CONNECTED/ERROR)
-   - Poll loop with coroutines
-
-5. **`MainActivity.kt`** + **`MainScreen.kt`** — Jetpack Compose UI
-   - Show connection status (green dot / red dot)
-   - Party panel: 6 slots, each showing species name + level + HP bar
-   - Tap a slot to expand: show moves
-   - Clean, dark theme (good for gaming)
-
-### Project Structure
-
-```
-er-companion/
-├── app/
-│   ├── src/main/
-│   │   ├── java/com/ercompanion/
-│   │   │   ├── network/RetroArchClient.kt
-│   │   │   ├── parser/Gen3PokemonParser.kt
-│   │   │   ├── parser/AddressScanner.kt
-│   │   │   ├── data/PokemonData.kt        (species/move name maps)
-│   │   │   ├── ui/MainScreen.kt
-│   │   │   ├── ui/theme/Theme.kt
-│   │   │   ├── MainViewModel.kt
-│   │   │   └── MainActivity.kt
-│   │   ├── res/
-│   │   │   └── values/strings.xml
-│   │   └── AndroidManifest.xml
-│   └── build.gradle.kts
-├── build.gradle.kts
-├── settings.gradle.kts
-└── gradle/
-    └── wrapper/
-        ├── gradle-wrapper.properties
-        └── gradle-wrapper.jar
+At minimum include the top 150 most common moves in Gen3-9 that appear in ER. Structure:
+```kotlin
+data class MoveData(val name: String, val power: Int, val type: Int, val category: Int)
+val MOVE_DATA: Map<Int, MoveData>  // move ID → MoveData
 ```
 
-## Key Requirements
+### 3. UI: Damage Display
 
-- **Permissions needed:** `INTERNET` only (no special permissions for localhost UDP)
-- **No root required** — RetroArch exposes UDP without root
-- **Dark theme** — this is a gaming companion, dark UI is appropriate
-- **Responsive** — polling must not block UI thread, use Kotlin coroutines
-- **Error handling** — graceful when RetroArch not running (show "Not connected")
-- **AYN Thor resolution** — 1080p bottom screen, design for full-width layout
+In `MainScreen.kt`, when a party slot is expanded:
+- Show the 4 moves with damage calc results vs current enemy lead
+- Format: `Earthquake — 84–99 dmg (42–50%) ⚡ Super effective!`
+- Color code: red for SE, gray for NVE, white for neutral, dark for immune
+- If no enemy party is scanned yet, show `— vs ?` placeholder
+- Show type effectiveness label inline
 
-## Notes
+### 4. Recommended Builds
 
-- Emerald Rogue is based on pokeemerald (Emerald, not FireRed) — use Emerald memory layout
-- The DepressoMocha mocha patch source: https://github.com/DepressoMocha/emerogue
-- The struct sizes are CONFIRMED from source: BoxPokemon=80, Pokemon=104
-- For now, hardcode a Gen1 species name table (151 entries) and expand later
-- Move name table: at minimum include the 4 starting moves and common ones
+**Source:** The ER Discord data indexed at `~/.openclaw/workspace/` via the er-discord-search skill.
+
+Run this query at build time to generate a static JSON file bundled in the APK assets:
+
+```bash
+python3 ~/.openclaw/workspace/scripts/er_search.py "recommended build" --top-k 50
+python3 ~/.openclaw/workspace/scripts/er_search.py "best moveset" --top-k 50
+python3 ~/.openclaw/workspace/scripts/er_search.py "tier list" --top-k 30
+```
+
+Parse the results and create `app/src/main/assets/builds.json` — a map of species name → recommended build:
+```json
+{
+  "garchomp": {
+    "tier": "S",
+    "notes": "Best physical sweeper, run Earthquake + Dragon Claw + Swords Dance",
+    "recommendedMoves": ["Earthquake", "Dragon Claw", "Swords Dance", "Stone Edge"],
+    "recommendedItem": "Life Orb"
+  }
+}
+```
+
+If Discord data is sparse for a species, omit it from the JSON (don't hallucinate).
+
+**In the UI**, when a party slot is expanded:
+- Show tier badge (S/A/B/C) if available
+- Show recommended moves as a "suggested" row below actual moves
+- Show recommended item if known
+
+### 5. Enemy Party Scanning
+
+Extend `AddressScanner.kt` to also locate `gEnemyParty`:
+- It follows `gPlayerParty` in memory at a known offset
+- Try: scan for a second valid party structure starting at `gPlayerParty + 624` (6 × 104 bytes)
+- Store in `MainViewModel` as `enemyPartyState: StateFlow<List<PartyMon>>`
+
+In the UI, show a compact enemy party row at the top (small icons + level only), and use enemy lead's stats/types for damage calculations.
+
+## Move Data Reference
+
+For the full move list, fetch and parse from:
+`https://raw.githubusercontent.com/DepressoMocha/emerogue/master/src/data/moves_info.h`
+
+This file has all move definitions. Parse `power`, `type`, `split` (physical/special/status) fields.
+
+## Pokémon Species Data Reference
+
+For base stats (needed for damage calc when party struct not yet decoded for enemy):
+`https://raw.githubusercontent.com/DepressoMocha/emerogue/master/src/data/pokemon/base_stats/`
+
+## Build Verification
+
+After making changes, run:
+```bash
+cd /Users/sam.painter/Projects/er-companion && ./gradlew assembleDebug 2>&1
+```
+
+Fix any compilation errors before signaling completion.
 
 ## Completion Signal
 
-When you have a buildable project (even if not all features are complete — just needs to compile and show the party panel UI with mock data if real connection isn't available), run:
+When the build succeeds (APK produced at `app/build/outputs/apk/debug/app-debug.apk`), output the following text on its own line:
 
-```
-openclaw system event --text "Done: er-companion PoC built — Kotlin/Compose Android app with RetroArch UDP client and Gen3 parser scaffold" --mode now
-```
+LOOP_COMPLETE

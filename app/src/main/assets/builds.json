@@ -1,0 +1,33 @@
+{
+  "_note": "Recommended builds from ER Discord community. Data is sparse and requires manual curation.",
+  "salamence": {
+    "tier": "S",
+    "notes": "Excellent mixed attacker with Dragon Dance",
+    "recommendedMoves": ["Dragon Dance", "Dragon Claw", "Earthquake", "Roost"],
+    "recommendedItem": "Life Orb"
+  },
+  "metagross": {
+    "tier": "S",
+    "notes": "Top physical tank with great typing",
+    "recommendedMoves": ["Meteor Mash", "Earthquake", "Bullet Punch", "Ice Punch"],
+    "recommendedItem": "Choice Band"
+  },
+  "gengar": {
+    "tier": "A",
+    "notes": "Fast special attacker with coverage",
+    "recommendedMoves": ["Shadow Ball", "Sludge Bomb", "Thunderbolt", "Focus Blast"],
+    "recommendedItem": "Life Orb"
+  },
+  "swampert": {
+    "tier": "A",
+    "notes": "Solid physical wall with good offensive presence",
+    "recommendedMoves": ["Earthquake", "Waterfall", "Ice Beam", "Stealth Rock"],
+    "recommendedItem": "Leftovers"
+  },
+  "blaziken": {
+    "tier": "A",
+    "notes": "Speed Boost makes it a late-game threat",
+    "recommendedMoves": ["Flare Blitz", "Hi Jump Kick", "Stone Edge", "Swords Dance"],
+    "recommendedItem": "Life Orb"
+  }
+}

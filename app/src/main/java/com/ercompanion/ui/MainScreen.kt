@@ -17,17 +17,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.ercompanion.MainViewModel
 import com.ercompanion.data.PokemonData
 import com.ercompanion.network.RetroArchClient
 import com.ercompanion.parser.PartyMon
 import com.ercompanion.ui.theme.HPGreen
 import com.ercompanion.ui.theme.HPRed
 import com.ercompanion.ui.theme.HPYellow
+import com.ercompanion.utils.SpriteUtils
 
 @Composable
 fun MainScreen(
+    viewModel: MainViewModel,
     connectionState: RetroArchClient.ConnectionStatus,
     partyState: List<PartyMon?>,
+    enemyPartyState: List<PartyMon?>,
     scanningState: Boolean,
     errorMessage: String?,
     onRescan: () -> Unit
@@ -109,6 +114,50 @@ fun MainScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
+        // Enemy party (compact view at top)
+        if (enemyPartyState.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Enemy Party",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        enemyPartyState.forEachIndexed { index, enemyMon ->
+                            if (enemyMon != null) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    val speciesName = PokemonData.getSpeciesName(enemyMon.species)
+                                    AsyncImage(
+                                        model = SpriteUtils.getSpriteUrl(speciesName),
+                                        contentDescription = speciesName,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                    Text(
+                                        text = "Lv.${enemyMon.level}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // Party display
         if (partyState.isEmpty()) {
             Box(
@@ -127,7 +176,8 @@ fun MainScreen(
             ) {
                 itemsIndexed(partyState) { index, mon ->
                     if (mon != null) {
-                        PokemonCard(mon = mon, slotNumber = index + 1)
+                        val enemyLead = enemyPartyState.firstOrNull()
+                        PokemonCard(viewModel = viewModel, mon = mon, slotNumber = index + 1, enemyTarget = enemyLead)
                     }
                 }
             }
@@ -136,8 +186,10 @@ fun MainScreen(
 }
 
 @Composable
-fun PokemonCard(mon: PartyMon, slotNumber: Int) {
+fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null) {
     var expanded by remember { mutableStateOf(false) }
+    val speciesName = PokemonData.getSpeciesName(mon.species)
+    val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
 
     Card(
         modifier = Modifier
@@ -153,7 +205,7 @@ fun PokemonCard(mon: PartyMon, slotNumber: Int) {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header: Slot number, name, level
+            // Header: Slot number, sprite, name, level
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -166,12 +218,34 @@ fun PokemonCard(mon: PartyMon, slotNumber: Int) {
                         color = Color.Gray,
                         modifier = Modifier.padding(end = 8.dp)
                     )
-                    Text(
-                        text = PokemonData.getSpeciesName(mon.species),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                    AsyncImage(
+                        model = SpriteUtils.getSpriteUrl(speciesName),
+                        contentDescription = speciesName,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .padding(end = 8.dp)
                     )
+                    Column {
+                        Text(
+                            text = speciesName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (pokemonBuild?.tier != null) {
+                            Text(
+                                text = "Tier ${pokemonBuild.tier}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = when (pokemonBuild.tier) {
+                                    "S" -> Color(0xFFFFD700) // Gold
+                                    "A" -> Color(0xFF4CAF50) // Green
+                                    "B" -> Color(0xFF2196F3) // Blue
+                                    else -> Color.Gray
+                                }
+                            )
+                        }
+                    }
                 }
                 Text(
                     text = "Lv. ${mon.level}",
@@ -250,7 +324,61 @@ fun PokemonCard(mon: PartyMon, slotNumber: Int) {
                         StatItem("EXP", mon.experience)
                     }
 
-                    // Moves
+                    // Recommended build
+                    if (pokemonBuild != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 8.dp))
+
+                        Text(
+                            text = "Recommended Build",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        if (pokemonBuild.notes != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = pokemonBuild.notes,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        if (pokemonBuild.recommendedMoves.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Suggested moves:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = Color.Gray
+                            )
+                            Column(modifier = Modifier.padding(start = 8.dp)) {
+                                pokemonBuild.recommendedMoves.forEach { moveName ->
+                                    Text(
+                                        text = "• $moveName",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (pokemonBuild.recommendedItem != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Item: ${pokemonBuild.recommendedItem}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    // Moves with damage calculations
                     if (mon.moves.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -260,15 +388,108 @@ fun PokemonCard(mon: PartyMon, slotNumber: Int) {
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         mon.moves.forEach { moveId ->
-                            Text(
-                                text = "• ${PokemonData.getMoveName(moveId)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(vertical = 2.dp)
+                            MoveItem(
+                                mon = mon,
+                                moveId = moveId,
+                                enemyTarget = enemyTarget
                             )
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun MoveItem(mon: PartyMon, moveId: Int, enemyTarget: PartyMon?) {
+    val moveName = PokemonData.getMoveName(moveId)
+    val moveData = PokemonData.getMoveData(moveId)
+
+    if (moveData == null || moveData.power == 0) {
+        // Status move or unknown move
+        Text(
+            text = "• $moveName",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 2.dp)
+        )
+        return
+    }
+
+    if (enemyTarget == null) {
+        // No enemy to calculate damage against
+        Text(
+            text = "• $moveName — vs ?",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(vertical = 2.dp)
+        )
+        return
+    }
+
+    // Calculate damage
+    val attackerTypes = PokemonData.getSpeciesTypes(mon.species)
+    val defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species)
+
+    val attackStat = if (moveData.category == 0) mon.attack else mon.spAttack
+    val defenseStat = if (moveData.category == 0) enemyTarget.defense else enemyTarget.spDefense
+
+    val result = com.ercompanion.data.DamageCalculator.calc(
+        attackerLevel = mon.level,
+        attackStat = attackStat,
+        defenseStat = defenseStat,
+        movePower = moveData.power,
+        moveType = moveData.type,
+        attackerTypes = attackerTypes,
+        defenderTypes = defenderTypes,
+        targetMaxHP = enemyTarget.maxHp,
+        targetCurrentHP = enemyTarget.hp,
+        moveCategory = moveData.category
+    )
+
+    // Color based on effectiveness
+    val effectColor = when {
+        result.effectiveness == 0f -> Color.DarkGray
+        result.effectiveness < 1f -> Color.Gray
+        result.effectiveness > 1f -> Color(0xFFFF6B6B) // Red for super effective
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    val damageText = if (result.maxDamage > 0) {
+        "${result.minDamage}–${result.maxDamage} dmg (${result.percentMin}–${result.percentMax}%)"
+    } else {
+        "No damage"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "• $moveName",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = damageText,
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 10.sp,
+                color = effectColor,
+                fontWeight = if (result.effectiveness > 1f) FontWeight.Bold else FontWeight.Normal
+            )
+            if (result.effectLabel.isNotEmpty()) {
+                Text(
+                    text = result.effectLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = effectColor
+                )
             }
         }
     }

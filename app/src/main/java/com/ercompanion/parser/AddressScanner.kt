@@ -16,11 +16,14 @@ class AddressScanner(
     companion object {
         private const val KEY_PARTY_ADDRESS = "party_address"
         private const val KEY_PARTY_COUNT_ADDRESS = "party_count_address"
+        private const val KEY_ENEMY_PARTY_ADDRESS = "enemy_party_address"
+        private const val KEY_ENEMY_PARTY_COUNT_ADDRESS = "enemy_party_count_address"
 
         private const val EWRAM_BASE = 0x02000000L
         private const val EWRAM_SIZE = 256 * 1024 // 256KB
         private const val POKEMON_SIZE = 104
         private const val MAX_PARTY_SIZE = 6
+        private const val PARTY_STRUCT_SIZE = POKEMON_SIZE * MAX_PARTY_SIZE // 624 bytes
 
         // Known approximate addresses from vanilla Emerald (starting hints)
         private val KNOWN_ADDRESSES = listOf(
@@ -136,10 +139,64 @@ class AddressScanner(
             .apply()
     }
 
+    suspend fun findEnemyPartyAddress(): Pair<Long, Long>? = withContext(Dispatchers.IO) {
+        // Check if we already have a cached address
+        val cachedCountAddr = prefs.getLong(KEY_ENEMY_PARTY_COUNT_ADDRESS, 0L)
+        val cachedPartyAddr = prefs.getLong(KEY_ENEMY_PARTY_ADDRESS, 0L)
+
+        if (cachedCountAddr != 0L && cachedPartyAddr != 0L) {
+            // Verify the cached address is still valid
+            if (verifyEnemyPartyAddress(cachedCountAddr, cachedPartyAddr)) {
+                return@withContext Pair(cachedCountAddr, cachedPartyAddr)
+            }
+        }
+
+        // Try to find enemy party based on player party location
+        val playerPartyCountAddr = prefs.getLong(KEY_PARTY_COUNT_ADDRESS, 0L)
+        if (playerPartyCountAddr != 0L) {
+            // Enemy party typically follows player party: player_count + PARTY_STRUCT_SIZE + 4
+            val enemyCountAddr = playerPartyCountAddr + PARTY_STRUCT_SIZE + 4
+            val enemyPartyAddr = enemyCountAddr + 4
+
+            if (verifyEnemyPartyAddress(enemyCountAddr, enemyPartyAddr)) {
+                saveEnemyAddresses(enemyCountAddr, enemyPartyAddr)
+                return@withContext Pair(enemyCountAddr, enemyPartyAddr)
+            }
+        }
+
+        null
+    }
+
+    private suspend fun verifyEnemyPartyAddress(countAddr: Long, partyAddr: Long): Boolean {
+        val countData = client.readMemory(countAddr, 1) ?: return false
+        val partyCount = countData[0].toInt() and 0xFF
+
+        // Enemy party might have 0 Pokemon (no active battle)
+        if (partyCount !in 0..MAX_PARTY_SIZE) return false
+
+        // If there's no Pokemon, it's still valid (no battle)
+        if (partyCount == 0) return true
+
+        // Read first Pokemon to verify
+        val firstMonData = client.readMemory(partyAddr, POKEMON_SIZE) ?: return false
+        val firstMon = Gen3PokemonParser.parsePokemon(firstMonData)
+
+        return firstMon != null
+    }
+
+    private fun saveEnemyAddresses(countAddr: Long, partyAddr: Long) {
+        prefs.edit()
+            .putLong(KEY_ENEMY_PARTY_COUNT_ADDRESS, countAddr)
+            .putLong(KEY_ENEMY_PARTY_ADDRESS, partyAddr)
+            .apply()
+    }
+
     fun clearCache() {
         prefs.edit()
             .remove(KEY_PARTY_COUNT_ADDRESS)
             .remove(KEY_PARTY_ADDRESS)
+            .remove(KEY_ENEMY_PARTY_COUNT_ADDRESS)
+            .remove(KEY_ENEMY_PARTY_ADDRESS)
             .apply()
     }
 }

@@ -25,12 +25,15 @@ class MainActivity : ComponentActivity() {
                     val viewModel: MainViewModel = viewModel()
                     val connectionState by viewModel.connectionState.collectAsState()
                     val partyState by viewModel.partyState.collectAsState()
+                    val enemyPartyState by viewModel.enemyPartyState.collectAsState()
                     val scanningState by viewModel.scanningState.collectAsState()
                     val errorMessage by viewModel.errorMessage.collectAsState()
 
                     MainScreen(
+                        viewModel = viewModel,
                         connectionState = connectionState,
                         partyState = partyState,
+                        enemyPartyState = enemyPartyState,
                         scanningState = scanningState,
                         errorMessage = errorMessage,
                         onRescan = { viewModel.rescan() }
