@@ -720,7 +720,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                     if (mon.moves.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Moves",
+                            text = "Moves (base stats — stat stages not tracked)",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.Gray
                         )
