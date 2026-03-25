@@ -129,48 +129,83 @@ class SaveStateReader(private val context: Context) {
             return data
         }
 
-        // Standard zlib (0x789C, 0x7801, 0x78DA)
-        if (data[0] == 0x78.toByte() && (data[1] == 0x9C.toByte() || data[1] == 0x01.toByte() || data[1] == 0xDA.toByte())) {
+        // RetroArch RZIP format: magic "#RZIPv1#" (bytes: 35 82 90 73 80 118 1 35)
+        if (data.size >= 20 &&
+            data[0] == 35.toByte() && data[1] == 82.toByte() &&
+            data[2] == 90.toByte() && data[3] == 73.toByte() &&
+            data[4] == 80.toByte() && data[5] == 118.toByte() &&
+            data[7] == 35.toByte()) {
+            return tryRzipDecompress(data)
+        }
+
+        // Standard zlib
+        if (data[0] == 0x78.toByte()) {
             tryZlibDecompress(data)?.let { return it }
         }
 
-        // Gzip (0x1F8B)
+        // Gzip
         if (data[0] == 0x1F.toByte() && data[1] == 0x8B.toByte()) {
             tryGzipDecompress(data)?.let { return it }
-        }
-
-        // Raw deflate (no header) — RetroArch Android default
-        tryRawDeflate(data)?.let { return it }
-
-        // Scan first 64 bytes for embedded compression magic
-        for (i in 1..64) {
-            if (i + 1 >= data.size) break
-            if (data[i] == 0x78.toByte() && (data[i+1] == 0x9C.toByte() || data[i+1] == 0x01.toByte() || data[i+1] == 0xDA.toByte())) {
-                tryZlibDecompress(data.copyOfRange(i, data.size))?.let { return it }
-            }
-            if (data[i] == 0x1F.toByte() && data[i+1] == 0x8B.toByte()) {
-                tryGzipDecompress(data.copyOfRange(i, data.size))?.let { return it }
-            }
         }
 
         return null
     }
 
-    private fun tryRawDeflate(data: ByteArray): ByteArray? {
+    private fun tryRzipDecompress(data: ByteArray): ByteArray? {
         return try {
-            val baos = ByteArrayOutputStream()
-            val inflater = Inflater(true) // nowrap=true for raw deflate
-            inflater.setInput(data)
-            val buf = ByteArray(8192)
-            while (!inflater.finished() && !inflater.needsInput()) {
-                val n = inflater.inflate(buf)
-                if (n == 0) break
-                baos.write(buf, 0, n)
+            // Header layout (20 bytes):
+            // [0-7]  magic "#RZIPv1#"
+            // [8-11] chunk size (uint32 LE)
+            // [12-19] total uncompressed size (uint64 LE)
+            val chunkSize = ((data[8].toInt() and 0xFF)) or
+                            ((data[9].toInt() and 0xFF) shl 8) or
+                            ((data[10].toInt() and 0xFF) shl 16) or
+                            ((data[11].toInt() and 0xFF) shl 24)
+
+            val uncompressedSize = (data[12].toLong() and 0xFF) or
+                                   ((data[13].toLong() and 0xFF) shl 8) or
+                                   ((data[14].toLong() and 0xFF) shl 16) or
+                                   ((data[15].toLong() and 0xFF) shl 24) or
+                                   ((data[16].toLong() and 0xFF) shl 32) or
+                                   ((data[17].toLong() and 0xFF) shl 40) or
+                                   ((data[18].toLong() and 0xFF) shl 48) or
+                                   ((data[19].toLong() and 0xFF) shl 56)
+
+            lastStatus = "RZIP: chunkSize=$chunkSize uncompressed=${uncompressedSize}B"
+
+            val baos = ByteArrayOutputStream(uncompressedSize.toInt())
+            var pos = 20 // skip header
+
+            while (pos < data.size) {
+                if (pos + 4 > data.size) break
+                // Each chunk: 4-byte compressed size (uint32 LE) + zlib data
+                val compChunkSize = ((data[pos].toInt() and 0xFF)) or
+                                    ((data[pos+1].toInt() and 0xFF) shl 8) or
+                                    ((data[pos+2].toInt() and 0xFF) shl 16) or
+                                    ((data[pos+3].toInt() and 0xFF) shl 24)
+                pos += 4
+
+                if (compChunkSize <= 0 || pos + compChunkSize > data.size) break
+
+                val chunkData = data.copyOfRange(pos, pos + compChunkSize)
+                pos += compChunkSize
+
+                // Decompress this chunk with zlib
+                val inflater = Inflater()
+                inflater.setInput(chunkData)
+                val outBuf = ByteArray(chunkSize * 2)
+                val n = inflater.inflate(outBuf)
+                inflater.end()
+                baos.write(outBuf, 0, n)
             }
-            inflater.end()
+
             val result = baos.toByteArray()
-            if (result.size >= MGBA_STATE_SIZE) result else null
+            if (result.size >= MGBA_STATE_SIZE) result else {
+                lastStatus = "RZIP decoded ${result.size} bytes, expected >= $MGBA_STATE_SIZE"
+                null
+            }
         } catch (e: Exception) {
+            lastStatus = "RZIP error: ${e.message}"
             null
         }
     }
