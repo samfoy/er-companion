@@ -21,6 +21,11 @@ object SpriteUtils {
             "farfetch'd" -> "farfetchd"
             "mime jr." -> "mime-jr"
             "ho-oh" -> "ho-oh"
+            // Tatsugiri forms — repo uses "tatsugiri" folder for base form
+            "tatsugiri" -> "tatsugiri"
+            "tatsugiri (droopy)" -> "tatsugiri"
+            "tatsugiri (stretchy)" -> "tatsugiri"
+            "tatsugiri (curly)" -> "tatsugiri"
             else -> name.lowercase().replace(" ", "-").replace(".", "").replace("'", "")
         }
     }

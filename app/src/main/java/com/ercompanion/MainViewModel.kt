@@ -88,25 +88,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val partyData = saveStateReader.readPartyData()
                         if (partyData != null) {
                             val (partyCount, partyBytes) = partyData
-                            val party = Gen3PokemonParser.parseParty(partyBytes, partyCount)
+
+                            // Parse all 12 slots to get OT ID from slot 0 (always player's mon)
+                            val allSlots = Gen3PokemonParser.parseAllSlots(partyBytes)
+                            val playerOtId = allSlots.firstOrNull { it != null }?.otId ?: -1L
+
+                            // Filter player party: only mons matching player's OT ID
+                            val party = Gen3PokemonParser.parseParty(partyBytes, minOf(partyCount, 12), filterOtId = playerOtId)
+                                .filterNotNull()
                             _partyState.value = party
                             _errorMessage.value = null
 
-                            // Slot index 6 (7th slot) = enemy lead during battle in ER
+                            // Enemy party: mons in slots 0..11 with a different OT ID
                             val rawBuf = saveStateReader.readRawPartyBuffer()
-                            if (rawBuf != null && rawBuf.size >= 7 * 104) {
-                                val enemyLead = Gen3PokemonParser.parseParty(rawBuf, 7).getOrNull(6)
-                                val isValidEnemy = enemyLead != null
-                                    && enemyLead.species > 0
-                                    && enemyLead.level > 0
-                                    && enemyLead.maxHp > 0
-                                _enemyPartyState.value = if (isValidEnemy) listOf(enemyLead!!) else emptyList()
+                            if (rawBuf != null) {
+                                val enemySlots = Gen3PokemonParser.parseAllSlots(rawBuf)
+                                    .filterNotNull()
+                                    .filter { playerOtId < 0 || it.otId != playerOtId }
+                                _enemyPartyState.value = enemySlots
 
-                                // Determine active player slot from save state
-                                // Try gBattlerPartyIndexes first, fall back to heuristic
                                 val activeSlot = saveStateReader.readActivePlayerSlot()
-                                _activePlayerSlot.value = if (isValidEnemy && activeSlot >= 0) activeSlot
-                                    else if (isValidEnemy) inferActiveSlot(party)
+                                _activePlayerSlot.value = if (enemySlots.isNotEmpty() && activeSlot >= 0) activeSlot
+                                    else if (enemySlots.isNotEmpty()) inferActiveSlot(party)
                                     else -1
                             } else {
                                 _enemyPartyState.value = emptyList()
@@ -201,7 +204,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Heuristic: the active mon is likely the first non-fainted mon with damage taken,
      *  or simply the first non-fainted mon if none have taken damage. */
-    private fun inferActiveSlot(party: List<PartyMon?>): Int {
+    private fun inferActiveSlot(party: List<PartyMon>): Int {
         val damaged = party.indexOfFirst { it != null && it.hp > 0 && it.hp < it.maxHp }
         if (damaged >= 0) return damaged
         return party.indexOfFirst { it != null && it.hp > 0 }.coerceAtLeast(0)

@@ -16,25 +16,28 @@ data class PartyMon(
     val spAttack: Int,
     val spDefense: Int,
     val experience: Int,
-    val friendship: Int
+    val friendship: Int,
+    val otId: Long = 0L
 )
 
 object Gen3PokemonParser {
     private const val POKEMON_SIZE = 104
 
-    // Substructure order lookup table (personality % 24)
+    // Canonical Gen3 substructure order table (personality % 24)
+    // Each entry: order[i] = the substruct TYPE at raw encrypted position i
+    // Types: 0=Growth(species/item/exp), 1=Attacks(moves), 2=EVs/Condition, 3=Misc
     private val SUBSTRUCTURE_ORDER = arrayOf(
         intArrayOf(0, 1, 2, 3), intArrayOf(0, 1, 3, 2), intArrayOf(0, 2, 1, 3),
-        intArrayOf(0, 3, 1, 2), intArrayOf(0, 2, 3, 1), intArrayOf(0, 3, 2, 1),
-        intArrayOf(1, 0, 2, 3), intArrayOf(1, 0, 3, 2), intArrayOf(2, 0, 1, 3),
-        intArrayOf(3, 0, 1, 2), intArrayOf(2, 0, 3, 1), intArrayOf(3, 0, 2, 1),
-        intArrayOf(1, 2, 0, 3), intArrayOf(1, 3, 0, 2), intArrayOf(2, 1, 0, 3),
-        intArrayOf(3, 1, 0, 2), intArrayOf(2, 3, 0, 1), intArrayOf(3, 2, 0, 1),
-        intArrayOf(1, 2, 3, 0), intArrayOf(1, 3, 2, 0), intArrayOf(2, 1, 3, 0),
-        intArrayOf(3, 1, 2, 0), intArrayOf(2, 3, 1, 0), intArrayOf(3, 2, 1, 0)
+        intArrayOf(0, 2, 3, 1), intArrayOf(0, 3, 1, 2), intArrayOf(0, 3, 2, 1),
+        intArrayOf(1, 0, 2, 3), intArrayOf(1, 0, 3, 2), intArrayOf(1, 2, 0, 3),
+        intArrayOf(1, 2, 3, 0), intArrayOf(1, 3, 0, 2), intArrayOf(1, 3, 2, 0),
+        intArrayOf(2, 0, 1, 3), intArrayOf(2, 0, 3, 1), intArrayOf(2, 1, 0, 3),
+        intArrayOf(2, 1, 3, 0), intArrayOf(2, 3, 0, 1), intArrayOf(2, 3, 1, 0),
+        intArrayOf(3, 0, 1, 2), intArrayOf(3, 0, 2, 1), intArrayOf(3, 1, 0, 2),
+        intArrayOf(3, 1, 2, 0), intArrayOf(3, 2, 0, 1), intArrayOf(3, 2, 1, 0)
     )
 
-    fun parseParty(data: ByteArray, partyCount: Int): List<PartyMon?> {
+    fun parseParty(data: ByteArray, partyCount: Int, filterOtId: Long = -1L): List<PartyMon?> {
         val party = mutableListOf<PartyMon?>()
 
         for (i in 0 until minOf(partyCount, 12)) {
@@ -42,10 +45,27 @@ object Gen3PokemonParser {
             if (offset + POKEMON_SIZE > data.size) break
 
             val monData = data.sliceArray(offset until offset + POKEMON_SIZE)
-            party.add(parsePokemon(monData))
+            val mon = parsePokemon(monData)
+            // If filtering by OT ID, skip mons that belong to other trainers
+            if (mon != null && filterOtId >= 0L && mon.otId != filterOtId) {
+                party.add(null)
+            } else {
+                party.add(mon)
+            }
         }
 
         return party
+    }
+
+    /** Parse all 12 slots raw (no count limit, no OT filter) — for enemy detection */
+    fun parseAllSlots(data: ByteArray): List<PartyMon?> {
+        val result = mutableListOf<PartyMon?>()
+        for (i in 0 until 12) {
+            val offset = i * POKEMON_SIZE
+            if (offset + POKEMON_SIZE > data.size) break
+            result.add(parsePokemon(data.sliceArray(offset until offset + POKEMON_SIZE)))
+        }
+        return result
     }
 
     fun parsePokemon(data: ByteArray): PartyMon? {
@@ -109,7 +129,8 @@ object Gen3PokemonParser {
             spAttack = spAttack,
             spDefense = spDefense,
             experience = experience.toInt(),
-            friendship = friendship
+            friendship = friendship,
+            otId = otId.toLong() and 0xFFFFFFFFL
         )
     }
 
