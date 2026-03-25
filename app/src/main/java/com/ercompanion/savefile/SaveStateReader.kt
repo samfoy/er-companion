@@ -247,10 +247,10 @@ class SaveStateReader(private val context: Context) {
         val level = partyBytes[monOffset + 84].toInt() and 0xFF
         if (level !in 1..100) return false
 
-        // maxHP (offset 88, unencrypted u16) must be 1-999
+        // maxHP (offset 88, unencrypted u16) — sane range 1-9999
         val maxHP = (partyBytes[monOffset + 88].toInt() and 0xFF) or
                     ((partyBytes[monOffset + 89].toInt() and 0xFF) shl 8)
-        if (maxHP == 0 || maxHP > 999) return false
+        if (maxHP == 0 || maxHP > 9999) return false
 
         // currentHP (offset 86, unencrypted u16) must be <= maxHP
         val currentHP = (partyBytes[monOffset + 86].toInt() and 0xFF) or
@@ -281,19 +281,24 @@ class SaveStateReader(private val context: Context) {
     }
 
     private fun scanForParty(ewram: ByteArray): Int {
-        // Known ER party location: EWRAM+0x37780 (confirmed from state file analysis)
-        // Scan outward from there first, then fall back to full scan
-        val knownHint = 0x37780
+        // Known ER party location: EWRAM+0x3777c (confirmed from state file analysis)
+        // This is fixed in the ER binary — try it first unconditionally
+        val knownHint = 0x3777c
+        tryReadPartyAt(ewram, knownHint)?.let { return knownHint }
+
+        // Scan outward from hint, then full EWRAM
         val scanRanges = listOf(
-            knownHint - 0x2000 to knownHint + 0x2000,  // near known address first
-            0 to ewram.size - 624                        // full scan fallback
+            knownHint - 0x4000 to knownHint + 0x4000,
+            0 to ewram.size - 628
         )
         for ((start, end) in scanRanges) {
             var i = maxOf(0, start)
-            val limit = minOf(end, ewram.size - 624)
+            val limit = minOf(end, ewram.size - 628)
             while (i <= limit) {
-                val result = tryReadPartyAt(ewram, i)
-                if (result != null && result.first >= 1) return i
+                if (i != knownHint) { // already tried hint
+                    val result = tryReadPartyAt(ewram, i)
+                    if (result != null && result.first >= 1) return i
+                }
                 i += 4
             }
         }
