@@ -38,15 +38,25 @@ class SaveStateReader(private val context: Context) {
     var lastStatus: String = "Not started"
 
     fun findStateFile(): File? {
+        // ER ROM names to prefer (case-insensitive contains check)
+        val erKeywords = listOf("emerald", "rogue", "emerogue", "er_", "pokeemerald")
+
         for (path in SEARCH_PATHS) {
             val dir = File(path)
             if (!dir.exists()) continue
             val stateFiles = dir.listFiles { f ->
                 f.name.endsWith(".state0") || f.name.endsWith(".state")
             } ?: continue
-            if (stateFiles.isNotEmpty()) {
-                return stateFiles.maxByOrNull { it.lastModified() }
-            }
+            if (stateFiles.isEmpty()) continue
+
+            // Prefer ER-named files first
+            val erFile = stateFiles
+                .filter { f -> erKeywords.any { kw -> f.name.lowercase().contains(kw) } }
+                .maxByOrNull { it.lastModified() }
+            if (erFile != null) return erFile
+
+            // Fall back to most recently modified
+            return stateFiles.maxByOrNull { it.lastModified() }
         }
         return null
     }
@@ -103,38 +113,55 @@ class SaveStateReader(private val context: Context) {
     private fun decompressIfNeeded(data: ByteArray): ByteArray? {
         if (data.size < 4) return null
 
-        // Check if already raw mGBA state (magic = 0x0100000A little-endian)
-        // versionMagic = GBASavestateMagic(0x01000000) + GBASavestateVersion(0x0A) = 0x0100000A
-        // stored as LE: 0x0A 0x00 0x00 0x01
+        // Already raw mGBA state?
         if (data.size >= MGBA_STATE_SIZE && isRawMgbaState(data)) {
             return data
         }
 
-        // Try zlib (most common for RetroArch)
+        // Standard zlib (0x789C, 0x7801, 0x78DA)
         if (data[0] == 0x78.toByte() && (data[1] == 0x9C.toByte() || data[1] == 0x01.toByte() || data[1] == 0xDA.toByte())) {
-            return tryZlibDecompress(data)
+            tryZlibDecompress(data)?.let { return it }
         }
 
-        // Try gzip
+        // Gzip (0x1F8B)
         if (data[0] == 0x1F.toByte() && data[1] == 0x8B.toByte()) {
-            return tryGzipDecompress(data)
+            tryGzipDecompress(data)?.let { return it }
         }
 
-        // RetroArch sometimes prepends a small header before compressed data
-        // Try scanning first 32 bytes for zlib/gzip magic
-        for (i in 1..32) {
+        // Raw deflate (no header) — RetroArch Android default
+        tryRawDeflate(data)?.let { return it }
+
+        // Scan first 64 bytes for embedded compression magic
+        for (i in 1..64) {
             if (i + 1 >= data.size) break
             if (data[i] == 0x78.toByte() && (data[i+1] == 0x9C.toByte() || data[i+1] == 0x01.toByte() || data[i+1] == 0xDA.toByte())) {
-                val result = tryZlibDecompress(data.copyOfRange(i, data.size))
-                if (result != null) return result
+                tryZlibDecompress(data.copyOfRange(i, data.size))?.let { return it }
             }
             if (data[i] == 0x1F.toByte() && data[i+1] == 0x8B.toByte()) {
-                val result = tryGzipDecompress(data.copyOfRange(i, data.size))
-                if (result != null) return result
+                tryGzipDecompress(data.copyOfRange(i, data.size))?.let { return it }
             }
         }
 
         return null
+    }
+
+    private fun tryRawDeflate(data: ByteArray): ByteArray? {
+        return try {
+            val baos = ByteArrayOutputStream()
+            val inflater = Inflater(true) // nowrap=true for raw deflate
+            inflater.setInput(data)
+            val buf = ByteArray(8192)
+            while (!inflater.finished() && !inflater.needsInput()) {
+                val n = inflater.inflate(buf)
+                if (n == 0) break
+                baos.write(buf, 0, n)
+            }
+            inflater.end()
+            val result = baos.toByteArray()
+            if (result.size >= MGBA_STATE_SIZE) result else null
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun isRawMgbaState(data: ByteArray): Boolean {
