@@ -99,17 +99,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             _partyState.value = party
                             _errorMessage.value = null
 
-                            // Enemy party: only show if actively in battle (gBattlersCount == 2)
+                            // Enemy party: only show if actively in battle
+                            // gBattlersCount == 2 is necessary but not sufficient — ER doesn't
+                            // always reset it after battle. Secondary check: at least one enemy
+                            // mon must have HP > 0 (all fainted = battle is over).
                             val inBattle = saveStateReader.readInBattle()
-                            if (inBattle) {
-                                val enemySlots = allSlots.filterNotNull()
-                                    .filter { playerOtId < 0 || it.otId != playerOtId }
+                            val enemySlots = allSlots.filterNotNull()
+                                .filter { playerOtId < 0 || it.otId != playerOtId }
+                            val activeEnemy = enemySlots.any { it.hp > 0 }
+                            if (inBattle && activeEnemy) {
                                 _enemyPartyState.value = enemySlots
 
                                 val activeSlot = saveStateReader.readActivePlayerSlot()
-                                _activePlayerSlot.value = if (enemySlots.isNotEmpty() && activeSlot >= 0) activeSlot
-                                    else if (enemySlots.isNotEmpty()) inferActiveSlot(party)
-                                    else -1
+                                _activePlayerSlot.value = if (activeSlot >= 0) activeSlot
+                                    else inferActiveSlot(party)
                             } else {
                                 _enemyPartyState.value = emptyList()
                                 _activePlayerSlot.value = -1
