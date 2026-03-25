@@ -5,9 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,10 +41,12 @@ fun MainScreen(
     debugLog: List<String>,
     onRescan: () -> Unit
 ) {
+    val scrollState = androidx.compose.foundation.rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
         // Header with connection status
@@ -183,10 +188,10 @@ fun MainScreen(
                 )
             }
         } else {
-            LazyColumn(
+            Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                itemsIndexed(partyState) { index, mon ->
+                partyState.forEachIndexed { index, mon ->
                     if (mon != null) {
                         val enemyLead = enemyPartyState.firstOrNull()
                         PokemonCard(viewModel = viewModel, mon = mon, slotNumber = index + 1, enemyTarget = enemyLead)
@@ -626,23 +631,26 @@ fun DebugPanel(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Last updated timestamp
-                Text("Last Updated:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
+                Text("State Files Found:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
                 Spacer(modifier = Modifier.height(4.dp))
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFF0D0D0D), RoundedCornerShape(4.dp))
                         .padding(6.dp)
                 ) {
                     if (debugLog.isEmpty()) {
-                        Text("No updates yet...", color = Color(0xFF444444), fontSize = 10.sp)
+                        Text("Searching...", color = Color(0xFF444444), fontSize = 10.sp)
                     } else {
-                        androidx.compose.foundation.lazy.LazyColumn {
-                            items(debugLog.size) { i ->
-                                val line = debugLog[i]
-                                val color = if (line.startsWith("Reading:")) Color(0xFF6BCB77) else Color(0xFF888888)
-                                Text(line, color = color, fontSize = 9.sp, lineHeight = 12.sp)
+                        debugLog.forEach { line ->
+                            val color = when {
+                                line.startsWith("Reading:") || line.startsWith("OK:") -> Color(0xFF6BCB77)
+                                line.contains("not found") || line.contains("empty") -> Color(0xFF666666)
+                                line.startsWith("No state") || line.contains("fail") || line.contains("Error") -> Color(0xFFFF6B6B)
+                                else -> Color(0xFF888888)
                             }
+                            Text(line, color = color, fontSize = 9.sp, lineHeight = 13.sp,
+                                modifier = Modifier.padding(vertical = 1.dp))
                         }
                     }
                 }
