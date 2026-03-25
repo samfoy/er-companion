@@ -238,20 +238,40 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?) {
         hpFrac > 0.2f -> HPYellow
         else -> HPRed
     }
-    // Best move damage vs enemy
+
+    // Best move damage this mon deals vs enemy
     val bestDmgPct = if (enemyTarget != null) {
         mon.moves.filter { it != 0 }.mapNotNull { moveId ->
             val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
             if (md.power == 0) return@mapNotNull null
-            val atkStat = if (md.category == 0) mon.attack else mon.spAttack
-            val defStat = if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense
             val result = com.ercompanion.calc.DamageCalculator.calc(
-                mon.level, atkStat, defStat, md.power, md.type,
+                mon.level,
+                if (md.category == 0) mon.attack else mon.spAttack,
+                if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense,
+                md.power, md.type,
                 PokemonData.getSpeciesTypes(mon.species),
                 PokemonData.getSpeciesTypes(enemyTarget.species),
                 enemyTarget.maxHp
             )
             if (enemyTarget.maxHp > 0) (result.maxDamage * 100 / enemyTarget.maxHp) else 0
+        }.maxOrNull()
+    } else null
+
+    // Best move damage enemy deals vs this mon on switch-in
+    val enemyDmgPct = if (enemyTarget != null) {
+        enemyTarget.moves.filter { it != 0 }.mapNotNull { moveId ->
+            val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
+            if (md.power == 0) return@mapNotNull null
+            val result = com.ercompanion.calc.DamageCalculator.calc(
+                enemyTarget.level,
+                if (md.category == 0) enemyTarget.attack else enemyTarget.spAttack,
+                if (md.category == 0) mon.defense else mon.spDefense,
+                md.power, md.type,
+                PokemonData.getSpeciesTypes(enemyTarget.species),
+                PokemonData.getSpeciesTypes(mon.species),
+                mon.maxHp
+            )
+            if (mon.maxHp > 0) (result.maxDamage * 100 / mon.maxHp) else 0
         }.maxOrNull()
     } else null
 
@@ -293,13 +313,28 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?) {
                             .fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(hpColor)
                     )
                 }
-                if (bestDmgPct != null && bestDmgPct > 0) {
-                    val color = when {
-                        bestDmgPct >= 100 -> HPRed
-                        bestDmgPct >= 50  -> HPYellow
-                        else              -> Color.Gray
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Outgoing: best move vs enemy
+                    if (bestDmgPct != null && bestDmgPct > 0) {
+                        val color = when {
+                            bestDmgPct >= 100 -> HPRed
+                            bestDmgPct >= 50  -> HPYellow
+                            else              -> Color.Gray
+                        }
+                        Text("→ ${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
                     }
-                    Text("best move: ${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
+                    // Incoming: enemy best move vs this mon
+                    if (enemyDmgPct != null && enemyDmgPct > 0) {
+                        val color = when {
+                            enemyDmgPct >= 100 -> HPRed
+                            enemyDmgPct >= 50  -> HPYellow
+                            else              -> Color(0xFF888888)
+                        }
+                        Text("← ${enemyDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
+                    }
                 }
             }
         }
