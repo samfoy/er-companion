@@ -154,66 +154,57 @@ class SaveStateReader(private val context: Context) {
         return result
     }
 
+    private fun isValidMon(partyBytes: ByteArray, monOffset: Int): Boolean {
+        if (monOffset + 90 > partyBytes.size) return false
+
+        // personality (offset 0) must be non-zero
+        val personality = (partyBytes[monOffset].toInt() and 0xFF) or
+                          ((partyBytes[monOffset+1].toInt() and 0xFF) shl 8) or
+                          ((partyBytes[monOffset+2].toInt() and 0xFF) shl 16) or
+                          ((partyBytes[monOffset+3].toInt() and 0xFF) shl 24)
+        if (personality == 0) return false
+
+        // level (offset 84, unencrypted) must be 1-100
+        val level = partyBytes[monOffset + 84].toInt() and 0xFF
+        if (level !in 1..100) return false
+
+        // maxHP (offset 88, unencrypted u16) must be 1-999
+        val maxHP = (partyBytes[monOffset + 88].toInt() and 0xFF) or
+                    ((partyBytes[monOffset + 89].toInt() and 0xFF) shl 8)
+        if (maxHP == 0 || maxHP > 999) return false
+
+        // currentHP (offset 86, unencrypted u16) must be <= maxHP
+        val currentHP = (partyBytes[monOffset + 86].toInt() and 0xFF) or
+                        ((partyBytes[monOffset + 87].toInt() and 0xFF) shl 8)
+        if (currentHP > maxHP) return false
+
+        return true
+    }
+
     private fun tryReadPartyAt(ewram: ByteArray, offset: Int): Pair<Int, ByteArray>? {
-        if (offset < 0 || offset + 4 + 624 > ewram.size) return null
-        val count = ewram[offset].toInt() and 0xFF
-        if (count !in 1..6) return null
+        // offset here is the START of the party array (not the count byte)
+        if (offset < 0 || offset + 624 > ewram.size) return null
 
-        val partyBytes = ewram.copyOfRange(offset + 4, offset + 4 + 624)
+        val partyBytes = ewram.copyOfRange(offset, offset + 624)
 
-        // Validate each mon in the party using unencrypted fields in struct Pokemon:
-        // BoxPokemon is 80 bytes, then: status(4), level(1), mail(1), hp(2), maxHP(2)...
-        // level is at offset 84 within each 104-byte Pokemon struct
-        var validCount = 0
-        for (i in 0 until count) {
-            val monOffset = i * 104
-            if (monOffset + 90 > partyBytes.size) return null
-
-            // personality (offset 0, u32) must be non-zero
-            val personality = (partyBytes[monOffset].toInt() and 0xFF) or
-                              ((partyBytes[monOffset+1].toInt() and 0xFF) shl 8) or
-                              ((partyBytes[monOffset+2].toInt() and 0xFF) shl 16) or
-                              ((partyBytes[monOffset+3].toInt() and 0xFF) shl 24)
-            if (personality == 0) return null
-
-            // level (offset 84, unencrypted u8) must be 1-100
-            val level = partyBytes[monOffset + 84].toInt() and 0xFF
-            if (level !in 1..100) return null
-
-            // maxHP (offset 88, u16) must be > 0 and sane (< 1000)
-            val maxHP = (partyBytes[monOffset + 88].toInt() and 0xFF) or
-                        ((partyBytes[monOffset + 89].toInt() and 0xFF) shl 8)
-            if (maxHP == 0 || maxHP > 999) return null
-
-            validCount++
+        // Count valid consecutive mons from slot 0
+        var count = 0
+        for (i in 0..5) {
+            if (isValidMon(partyBytes, i * 104)) count++ else break
         }
-        if (validCount != count) return null
+        if (count == 0) return null
+
         return Pair(count, partyBytes)
     }
 
     private fun scanForParty(ewram: ByteArray): Int {
-        // Scan EWRAM for a byte in range 1-6 (party count) followed by valid Pokemon struct
-        // Search in likely range: 0x20000 - 0x3C000 (where trainer data typically lives in Emerald variants)
-        // Align to 4 bytes
-        val searchStart = 0x20000
-        val searchEnd   = minOf(ewram.size - 628, 0x3C000)
-        var i = searchStart
+        // Scan for the START of the party array (gPlayerParty), not the count byte
+        // Look for N consecutive valid 104-byte Pokemon structs
+        val searchEnd = ewram.size - 624
+        var i = 0
         while (i < searchEnd) {
-            val count = ewram[i].toInt() and 0xFF
-            if (count in 1..6) {
-                val result = tryReadPartyAt(ewram, i)
-                if (result != null) return i
-            }
-            i += 4
-        }
-        // Broader scan if not found
-        i = 0
-        while (i < ewram.size - 628) {
-            val count = ewram[i].toInt() and 0xFF
-            if (count in 1..6) {
-                val result = tryReadPartyAt(ewram, i)
-                if (result != null) return i
-            }
+            val result = tryReadPartyAt(ewram, i)
+            if (result != null && result.first >= 1) return i
             i += 4
         }
         return -1
