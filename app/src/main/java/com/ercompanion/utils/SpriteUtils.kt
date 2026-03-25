@@ -5,29 +5,21 @@ object SpriteUtils {
 
     fun getSpriteUrl(speciesName: String): String {
         val slug = speciesNameToSlug(speciesName)
-        return "$SPRITE_BASE_URL/$slug/icon.png"
+        return "$SPRITE_BASE_URL/$slug/anim_front.png"
     }
 
     private fun speciesNameToSlug(name: String): String {
         return when (name.lowercase()) {
-            // Special cases
             "nidoran♀" -> "nidoran-f"
             "nidoran♂" -> "nidoran-m"
             "mr. mime" -> "mr-mime"
             "farfetch'd" -> "farfetchd"
             "mime jr." -> "mime-jr"
-            "porygon2" -> "porygon2"
             "ho-oh" -> "ho-oh"
-            else -> {
-                // General case: lowercase and replace spaces with hyphens
-                name.lowercase()
-                    .replace(" ", "-")
-                    .replace(".", "")
-                    .replace("'", "")
-            }
+            else -> name.lowercase().replace(" ", "-").replace(".", "").replace("'", "")
         }
     }
 
-    // Fallback placeholder for when sprite fails to load
-    const val PLACEHOLDER_SPRITE = "https://raw.githubusercontent.com/DepressoMocha/emerogue/moka-dev/graphics/pokemon/bulbasaur/icon.png"
+    const val PLACEHOLDER_SPRITE = "https://raw.githubusercontent.com/DepressoMocha/emerogue/moka-dev/graphics/pokemon/bulbasaur/anim_front.png"
 }
+

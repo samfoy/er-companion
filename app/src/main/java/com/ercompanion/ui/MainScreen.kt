@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import coil.request.ImageRequest
 import com.ercompanion.MainViewModel
 import com.ercompanion.data.PokemonData
 import com.ercompanion.network.RetroArchClient
@@ -165,7 +167,8 @@ fun MainScreen(
                                     AsyncImage(
                                         model = SpriteUtils.getSpriteUrl(speciesName),
                                         contentDescription = speciesName,
-                                        modifier = Modifier.size(32.dp)
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                        modifier = Modifier.size(40.dp)
                                     )
                                     Text(
                                         text = "Lv.${enemyMon.level}",
@@ -245,8 +248,9 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                     AsyncImage(
                         model = SpriteUtils.getSpriteUrl(speciesName),
                         contentDescription = speciesName,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(48.dp)
                             .padding(end = 8.dp)
                     )
                     Column {
