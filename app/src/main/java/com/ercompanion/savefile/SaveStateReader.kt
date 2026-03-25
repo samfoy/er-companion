@@ -144,7 +144,12 @@ class SaveStateReader(private val context: Context) {
         lastStatus = "Scanning EWRAM for party data..."
         val offset = scanForParty(ewram)
         if (offset < 0) {
-            lastStatus = "Could not find valid party in EWRAM — is ER loaded and in-game?"
+            // Diagnostic: show what's at the hint address
+            val hint = 0x3777c
+            val hintCount = if (hint < ewram.size) ewram[hint].toInt() and 0xFF else -1
+            val hintPers = if (hint + 8 < ewram.size) readU32LE(ewram, hint + 4) else -1L
+            val hintLvl = if (hint + 4 + 84 < ewram.size) ewram[hint + 4 + 84].toInt() and 0xFF else -1
+            lastStatus = "No party found. Hint@0x3777c: count=$hintCount pers=0x${hintPers.toString(16)} lvl=$hintLvl. State may be from different ER build/save."
             return null
         }
         cachedPartyOffset = offset
@@ -212,12 +217,6 @@ class SaveStateReader(private val context: Context) {
         val personality = readU32LE(partyBytes, monOffset + 0)
         if (personality == 0L) return false
 
-        // Verify checksum
-        val storedChecksum = ((partyBytes[monOffset + 28].toInt() and 0xFF) or
-                              ((partyBytes[monOffset + 29].toInt() and 0xFF) shl 8)).toUShort()
-        val computedChecksum = computeChecksum(partyBytes, monOffset)
-        if (storedChecksum != computedChecksum) return false
-
         // level (offset 84, unencrypted) must be 1-100
         val level = partyBytes[monOffset + 84].toInt() and 0xFF
         if (level !in 1..100) return false
@@ -231,10 +230,6 @@ class SaveStateReader(private val context: Context) {
         val currentHP = (partyBytes[monOffset + 86].toInt() and 0xFF) or
                         ((partyBytes[monOffset + 87].toInt() and 0xFF) shl 8)
         if (currentHP > maxHP) return false
-
-        // Decrypt and validate species (1-1526 for ER)
-        val species = decryptSubstruct0Species(partyBytes, monOffset)
-        if (species !in 1..1526) return false
 
         return true
     }
@@ -254,6 +249,8 @@ class SaveStateReader(private val context: Context) {
             if (!isValidMon(partyBytes, i * 104)) return null
             validCount++
         }
+        // Require at least 2 valid mons to avoid false positives
+        if (validCount < minOf(count, 2)) return null
         return Pair(count, partyBytes)
     }
 
