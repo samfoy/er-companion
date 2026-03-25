@@ -349,14 +349,18 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         )
                         if (pokemonBuild?.tier != null) {
                             Text(
-                                text = "Tier ${pokemonBuild.tier}",
+                                text = pokemonBuild.tier,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = when (pokemonBuild.tier) {
-                                    "S" -> Color(0xFFFFD700) // Gold
-                                    "A" -> Color(0xFF4CAF50) // Green
-                                    "B" -> Color(0xFF2196F3) // Blue
-                                    else -> Color.Gray
+                                    "Z"  -> Color(0xFFFF00FF) // Magenta — legendary
+                                    "S+" -> Color(0xFFFF4444) // Bright red
+                                    "S"  -> Color(0xFFFFD700) // Gold
+                                    "A"  -> Color(0xFF4CAF50) // Green
+                                    "B"  -> Color(0xFF2196F3) // Blue
+                                    "C"  -> Color(0xFF9E9E9E) // Gray
+                                    else -> Color(0xFF666666)
                                 }
                             )
                         }

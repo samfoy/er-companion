@@ -1,33 +1,622 @@
 {
-  "_note": "Recommended builds from ER Discord community. Data is sparse and requires manual curation.",
+  "_note": "ER Discord community builds + nuttyrabbit June 2025 tier list. Tiers: Z > S+ > S > A > B > C > D > E > F",
+  "mewtwo": {
+    "tier": "Z"
+  },
+  "rayquaza": {
+    "tier": "Z"
+  },
+  "zacian": {
+    "tier": "Z"
+  },
+  "yveltal": {
+    "tier": "Z"
+  },
+  "calyrex-shadow": {
+    "tier": "Z"
+  },
+  "eternatus": {
+    "tier": "Z",
+    "recommendedMoves": [
+      "Dynamax Cannon",
+      "Flamethrower",
+      "Recover",
+      "Sludge Bomb"
+    ]
+  },
+  "aegislash": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "King's Shield",
+      "Iron Head",
+      "Sacred Sword",
+      "Swords Dance",
+      "Shadow Sneak"
+    ],
+    "notes": "Stance change mechanic. King's Shield is mandatory. Iron Head + Sacred Sword is the core combo"
+  },
   "salamence": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Outrage",
+      "Dragon Claw",
+      "Earthquake",
+      "Roost"
+    ],
+    "notes": "Moxie snowballs with every KO. Dragon Dance + Moxie = run-ender"
+  },
+  "mega-salamence": {
+    "tier": "S+"
+  },
+  "mega-lucario": {
+    "tier": "S+",
+    "notes": "Adaptability boosts STAB to 2x \u2014 Close Combat + Bullet Punch hits absurdly hard"
+  },
+  "mega-metagross": {
+    "tier": "S+"
+  },
+  "mega-garchomp": {
+    "tier": "S+"
+  },
+  "excadrill": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Earthquake",
+      "Iron Head",
+      "Rock Slide",
+      "Swords Dance",
+      "Rapid Spin"
+    ]
+  },
+  "dragapult": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Dragon Darts",
+      "Shadow Ball",
+      "U-turn",
+      "Fire Blast"
+    ]
+  },
+  "kartana": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Leaf Blade",
+      "Sacred Sword",
+      "Smart Strike",
+      "Swords Dance",
+      "Aerial Ace"
+    ]
+  },
+  "gyarados": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Waterfall",
+      "Crunch",
+      "Earthquake",
+      "Ice Fang"
+    ],
+    "notes": "Moxie catapults it. Intimidate also great for tanking. Dragon Dance ASAP"
+  },
+  "garchomp": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Earthquake",
+      "Dragon Claw",
+      "Swords Dance",
+      "Stone Edge",
+      "Fire Fang"
+    ],
+    "notes": "Dragon/Ground STAB barely resisted. Rough Skin punishes contact moves"
+  },
+  "lucario": {
     "tier": "S",
-    "notes": "Excellent mixed attacker with Dragon Dance",
-    "recommendedMoves": ["Dragon Dance", "Dragon Claw", "Earthquake", "Roost"],
-    "recommendedItem": "Life Orb"
+    "recommendedMoves": [
+      "Close Combat",
+      "Bullet Punch",
+      "Swords Dance",
+      "Crunch",
+      "Extreme Speed"
+    ],
+    "notes": "Justified or Inner Focus. Mega Lucario is S+ and busted"
+  },
+  "tyranitar": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Stone Edge",
+      "Crunch",
+      "Earthquake",
+      "Ice Punch"
+    ],
+    "notes": "Sand Stream + DD sets are oppressive. Strong special bulk too"
   },
   "metagross": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Meteor Mash",
+      "Earthquake",
+      "Bullet Punch",
+      "Ice Punch",
+      "Thunder Punch"
+    ],
+    "notes": "Clear Body ignores stat drops. Bullet Punch priority seals deals"
+  },
+  "greninja": {
     "tier": "S",
-    "notes": "Top physical tank with great typing",
-    "recommendedMoves": ["Meteor Mash", "Earthquake", "Bullet Punch", "Ice Punch"],
-    "recommendedItem": "Choice Band"
+    "recommendedMoves": [
+      "Surf",
+      "Ice Beam",
+      "Dark Pulse",
+      "U-turn",
+      "Gunk Shot"
+    ],
+    "notes": "Protean: every move gets STAB. Incredible special coverage"
   },
-  "gengar": {
-    "tier": "A",
-    "notes": "Fast special attacker with coverage",
-    "recommendedMoves": ["Shadow Ball", "Sludge Bomb", "Thunderbolt", "Focus Blast"],
-    "recommendedItem": "Life Orb"
+  "mimikyu": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Swords Dance",
+      "Shadow Sneak",
+      "Play Rough",
+      "Shadow Claw",
+      "Drain Punch"
+    ],
+    "notes": "Disguise absorbs one hit for free. Swords Dance behind Disguise is devastating"
   },
-  "swampert": {
+  "toxapex": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Scald",
+      "Toxic",
+      "Recover",
+      "Haze",
+      "Baneful Bunker"
+    ]
+  },
+  "dragonite": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Extreme Speed",
+      "Dragon Claw",
+      "Fire Punch",
+      "Earthquake"
+    ],
+    "notes": "Multiscale halves damage at full HP. Dragon Dance + Extreme Speed priority"
+  },
+  "hydreigon": {
     "tier": "A",
-    "notes": "Solid physical wall with good offensive presence",
-    "recommendedMoves": ["Earthquake", "Waterfall", "Ice Beam", "Stealth Rock"],
-    "recommendedItem": "Leftovers"
+    "recommendedMoves": [
+      "Draco Meteor",
+      "Dark Pulse",
+      "Flamethrower",
+      "Focus Blast",
+      "Roost"
+    ],
+    "notes": "Late to evolve (Lv64) but worth it. Levitate immunity"
+  },
+  "alakazam": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Psychic",
+      "Shadow Ball",
+      "Focus Blast",
+      "Nasty Plot",
+      "Energy Ball"
+    ],
+    "notes": "One of the fastest special attackers. Frail but Nasty Plot sets nuke"
+  },
+  "gardevoir": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Moonblast",
+      "Psychic",
+      "Shadow Ball",
+      "Calm Mind",
+      "Focus Blast"
+    ],
+    "notes": "Trace copies opponent ability. Calm Mind boosts both offenses"
+  },
+  "gallade": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Close Combat",
+      "Psycho Cut",
+      "Swords Dance",
+      "Ice Punch",
+      "Shadow Sneak"
+    ]
+  },
+  "togekiss": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Air Slash",
+      "Nasty Plot",
+      "Aura Sphere",
+      "Thunderbolt",
+      "Roost"
+    ],
+    "notes": "Serene Grace makes Air Slash flinch 60% of the time"
+  },
+  "rotom-wash": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Volt Switch",
+      "Hydro Pump",
+      "Will-O-Wisp",
+      "Pain Split",
+      "Thunderbolt"
+    ]
+  },
+  "rotom": {
+    "tier": "A"
+  },
+  "suicune": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Scald",
+      "Ice Beam",
+      "Calm Mind",
+      "Roar",
+      "Rest"
+    ]
+  },
+  "nidoking": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Earth Power",
+      "Ice Beam",
+      "Thunderbolt",
+      "Flamethrower",
+      "Sludge Wave"
+    ],
+    "notes": "Sheer Force + Life Orb = no recoil and massive damage on 3 coverage moves"
+  },
+  "medicham": {
+    "tier": "A",
+    "recommendedMoves": [
+      "High Jump Kick",
+      "Psycho Cut",
+      "Ice Punch",
+      "Thunder Punch",
+      "Bullet Punch"
+    ],
+    "notes": "Pure Power doubles attack. Hits extremely hard. Scarf set can nuke at high speed"
   },
   "blaziken": {
     "tier": "A",
-    "notes": "Speed Boost makes it a late-game threat",
-    "recommendedMoves": ["Flare Blitz", "Hi Jump Kick", "Stone Edge", "Swords Dance"],
-    "recommendedItem": "Life Orb"
+    "recommendedMoves": [
+      "Flare Blitz",
+      "Hi Jump Kick",
+      "Swords Dance",
+      "Stone Edge",
+      "Thunder Punch"
+    ],
+    "notes": "Speed Boost gives +1 Speed/turn. Becomes fastest mon in late game. Hi Jump Kick + Flare Blitz nukes"
+  },
+  "gengar": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Shadow Ball",
+      "Sludge Bomb",
+      "Focus Blast",
+      "Thunderbolt",
+      "Nasty Plot"
+    ]
+  },
+  "snorlax": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Body Slam",
+      "Crunch",
+      "Earthquake",
+      "Rest",
+      "Sleep Talk"
+    ]
+  },
+  "lapras": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Ice Beam",
+      "Surf",
+      "Thunderbolt",
+      "Freeze-Dry",
+      "Sing"
+    ]
+  },
+  "machamp": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Close Combat",
+      "Ice Punch",
+      "Thunder Punch",
+      "Bullet Punch",
+      "Stone Edge"
+    ],
+    "notes": "Guts + Flame Orb doubles attack but burns HP. No Guard makes all moves hit 100%"
+  },
+  "flygon": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Dragon Claw",
+      "Earthquake",
+      "U-turn",
+      "Rock Slide"
+    ],
+    "notes": "High B tier. Dragon Dance + DisQuake (Dragon Claw/Earthquake) is solid. Levitate immunity"
+  },
+  "larvitar": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Stone Edge",
+      "Crunch",
+      "Earthquake",
+      "Ice Punch"
+    ],
+    "notes": "Slow to evolve but Tyranitar is absolutely worth it"
+  },
+  "beldum": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Meteor Mash",
+      "Earthquake",
+      "Bullet Punch",
+      "Ice Punch",
+      "Thunder Punch"
+    ],
+    "notes": "Slow leveling but Metagross/Mega Metagross payoff is huge. Worth every grind"
+  },
+  "nosepass": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Stealth Rock",
+      "Thunderbolt",
+      "Flash Cannon",
+      "Power Gem",
+      "Thunder Wave"
+    ],
+    "notes": "Probopass gets Sturdy and good special bulk. Decent support mon"
+  },
+  "mankey": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Close Combat",
+      "U-turn",
+      "Stone Edge",
+      "Earthquake",
+      "Ice Punch"
+    ],
+    "notes": "Primeape has Defiant for stat-drop revenge. Anger Point + Crit = nuke"
+  },
+  "slugma": {
+    "tier": "C",
+    "recommendedMoves": [
+      "Flamethrower",
+      "Earth Power",
+      "Nasty Plot",
+      "Flash Cannon",
+      "Will-O-Wisp"
+    ],
+    "notes": "Magcargo is C tier. Decent early fire type but gets outclassed quickly"
+  },
+  "phanpy": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Earthquake",
+      "Ice Shard",
+      "Stealth Rock",
+      "Rock Slide",
+      "Play Rough"
+    ],
+    "notes": "Donphan gets Sturdy. Ice Shard priority is great. Solid physical bulk"
+  },
+  "ralts": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Moonblast",
+      "Psychic",
+      "Shadow Ball",
+      "Calm Mind",
+      "Thunderbolt"
+    ],
+    "notes": "Gardevoir is A, Gallade is A. Either evolution is worth running"
+  },
+  "bagon": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Dragon Claw",
+      "Earthquake",
+      "Flare Blitz",
+      "Stone Edge"
+    ],
+    "notes": "Salamence with Moxie is S+ tier. Dragon Dance ASAP \u2014 snowball potential enormous"
+  },
+  "gible": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Earthquake",
+      "Dragon Claw",
+      "Swords Dance",
+      "Stone Edge",
+      "Fire Fang"
+    ],
+    "notes": "Garchomp S+ tier. Dragon/Ground STAB has minimal resists"
+  },
+  "riolu": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Close Combat",
+      "Bullet Punch",
+      "Swords Dance",
+      "Crunch",
+      "Extreme Speed"
+    ],
+    "notes": "Lucario is S, Mega Lucario is S+. Fast, hits both sides hard"
+  },
+  "dratini": {
+    "tier": "S",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Dragon Claw",
+      "Extreme Speed",
+      "Fire Punch",
+      "Earthquake"
+    ],
+    "notes": "Dragonite gets Multiscale \u2014 survives one hit at full HP. Dragon Dance + Extreme Speed"
+  },
+  "gastly": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Shadow Ball",
+      "Sludge Bomb",
+      "Focus Blast",
+      "Thunderbolt",
+      "Nasty Plot"
+    ],
+    "notes": "Gengar is A tier. Fast special attacker, Levitate immune to Ground"
+  },
+  "abra": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Psychic",
+      "Shadow Ball",
+      "Focus Blast",
+      "Energy Ball",
+      "Nasty Plot"
+    ],
+    "notes": "Alakazam is A tier \u2014 very fast, Nasty Plot sets nuke"
+  },
+  "machop": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Close Combat",
+      "Ice Punch",
+      "Thunder Punch",
+      "Bullet Punch",
+      "Stone Edge"
+    ],
+    "notes": "Machamp B tier. No Guard makes moves like DynamicPunch always hit"
+  },
+  "scyther": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Aerial Ace",
+      "X-Scissor",
+      "Swords Dance",
+      "Night Slash",
+      "Brick Break"
+    ],
+    "notes": "Scizor is higher. Technician boosts weak moves"
+  },
+  "eevee": {
+    "tier": "C",
+    "notes": "Depends entirely on evolution. Vaporeon/Umbreon/Espeon recommended"
+  },
+  "magikarp": {
+    "tier": "S+",
+    "recommendedMoves": [
+      "Dragon Dance",
+      "Waterfall",
+      "Crunch",
+      "Earthquake",
+      "Ice Fang"
+    ],
+    "notes": "Magikarp is obviously bad but Gyarados with Moxie is S+. Worth the pain"
+  },
+  "probopass": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Stealth Rock",
+      "Thunderbolt",
+      "Flash Cannon",
+      "Power Gem",
+      "Thunder Wave"
+    ]
+  },
+  "primeape": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Close Combat",
+      "U-turn",
+      "Stone Edge",
+      "Earthquake",
+      "Ice Punch"
+    ]
+  },
+  "annihilape": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Rage Fist",
+      "Close Combat",
+      "U-turn",
+      "Shadow Sneak",
+      "Bulk Up"
+    ],
+    "notes": "Rage Fist gains power with each hit taken. Bulk Up sets can get out of control"
+  },
+  "magcargo": {
+    "tier": "C"
+  },
+  "donphan": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Earthquake",
+      "Ice Shard",
+      "Stealth Rock",
+      "Rock Slide",
+      "Play Rough"
+    ]
+  },
+  "dragonair": {
+    "tier": "A"
+  },
+  "metang": {
+    "tier": "A"
+  },
+  "kirlia": {
+    "tier": "B"
+  },
+  "shelgon": {
+    "tier": "B"
+  },
+  "gabite": {
+    "tier": "A"
+  },
+  "charizard": {
+    "tier": "A",
+    "recommendedMoves": [
+      "Flamethrower",
+      "Air Slash",
+      "Dragon Pulse",
+      "Focus Blast",
+      "Roost"
+    ],
+    "notes": "Mega X is physical Dragon, Mega Y is special. Both are strong"
+  },
+  "venusaur": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Giga Drain",
+      "Sludge Bomb",
+      "Earthquake",
+      "Sleep Powder",
+      "Synthesis"
+    ]
+  },
+  "blastoise": {
+    "tier": "B",
+    "recommendedMoves": [
+      "Surf",
+      "Ice Beam",
+      "Aura Sphere",
+      "Flash Cannon",
+      "Rapid Spin"
+    ]
   }
 }
