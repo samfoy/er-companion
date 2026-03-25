@@ -183,6 +183,14 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
                "Fire","Water","Grass","Electric","Psychic","Ice","Dragon","Dark","Fairy"
         ).getOrNull(typeId) ?: "?"
     }
+    val playerLead = playerParty.firstOrNull { it != null }
+
+    // Score all enemy moves using AI simulator
+    val scoredMoves = if (playerLead != null) {
+        com.ercompanion.calc.BattleAISimulator.scoreMovesVsTarget(enemyLead, playerLead)
+    } else emptyList()
+    val predicted = com.ercompanion.calc.BattleAISimulator.predictAiMove(scoredMoves)
+    val isRandom = predicted.size > 1
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -190,7 +198,7 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Header
+            // Header: sprite + name/type + HP bar
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
                     model = SpriteUtils.getSpriteUrl(speciesName),
@@ -207,12 +215,11 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
                         color = Color(0xFFFF6B6B)
                     )
                     Text(
-                        text = "Lv.${enemyLead.level}  ${typeNames.joinToString("/")}",
+                        text = "Lv.${enemyLead.level}  ${typeNames.joinToString("/")}  Spd:${enemyLead.speed}",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.Gray
                     )
                 }
-                // HP bar
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "${enemyLead.hp}/${enemyLead.maxHp} HP",
@@ -232,60 +239,60 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
                 }
             }
 
-            // Enemy moves
-            if (enemyLead.moves.any { it != 0 }) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("Moves:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    enemyLead.moves.filter { it != 0 }.forEach { moveId ->
-                        val moveData = PokemonData.getMoveData(moveId)
-                        val moveName = PokemonData.getMoveName(moveId)
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFF3A2A2A)
-                        ) {
-                            Text(
-                                text = if (moveData != null && moveData.power > 0) "$moveName(${moveData.power})" else moveName,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                color = Color(0xFFFFAA88),
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // "Can it OHKO me?" — best damage enemy can deal vs each of my mons
-            val playerLead = playerParty.firstOrNull { it != null }
-            if (playerLead != null) {
+            // AI move prediction
+            if (scoredMoves.isNotEmpty() && playerLead != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider(color = Color(0xFF3A2A2A))
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Threat vs your lead:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                val bestEnemyDmg = enemyLead.moves.filter { it != 0 }.mapNotNull { moveId ->
-                    PokemonData.getMoveData(moveId)?.let { moveData ->
-                        if (moveData.power > 0) {
-                            val dmg = viewModel.calcDamage(enemyLead, playerLead, moveData)
-                            Triple(moveId, moveData, dmg)
-                        } else null
-                    }
-                }.maxByOrNull { it.third }
+                Spacer(modifier = Modifier.height(6.dp))
 
-                if (bestEnemyDmg != null) {
-                    val (moveId, moveData, dmg) = bestEnemyDmg
-                    val pct = if (playerLead.maxHp > 0) (dmg * 100 / playerLead.maxHp) else 0
-                    val moveName = PokemonData.getMoveName(moveId)
-                    val color = when {
-                        pct >= 100 -> Color(0xFFF44336)
-                        pct >= 50 -> Color(0xFFFFEB3B)
-                        else -> Color(0xFF4CAF50)
+                val playerName = PokemonData.getSpeciesName(playerLead.species)
+                Text(
+                    text = if (isRandom) "🎲 AI: random (${predicted.size} tied)" else "🎯 AI will likely use:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Show all moves sorted by score, predicted move(s) highlighted
+                scoredMoves.sortedByDescending { it.score }.forEach { sm ->
+                    val isPredicted = predicted.contains(sm)
+                    val dmgColor = when {
+                        sm.damagePercent >= 100 -> Color(0xFFF44336)
+                        sm.damagePercent >= 50  -> Color(0xFFFFEB3B)
+                        else                    -> Color(0xFFAAAAAA)
                     }
-                    Text(
-                        text = "${PokemonData.getSpeciesName(playerLead.species)}: $moveName → $dmg dmg ($pct%)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = color
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isPredicted) "▶ " else "  ",
+                                fontSize = 10.sp,
+                                color = if (isPredicted) Color(0xFFFF6B6B) else Color.Transparent
+                            )
+                            Text(
+                                text = sm.moveName,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isPredicted) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isPredicted) Color.White else Color.Gray
+                            )
+                            if (sm.moveData?.power != null && sm.moveData.power > 0) {
+                                Text(
+                                    text = " (${sm.moveData.power})",
+                                    fontSize = 9.sp,
+                                    color = Color(0xFF888888)
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (sm.damagePercent > 0) "${sm.damagePercent}% vs $playerName" else sm.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            color = dmgColor
+                        )
+                    }
                 }
             }
         }
