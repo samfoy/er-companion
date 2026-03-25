@@ -26,9 +26,13 @@ class SaveStateReader(private val context: Context) {
         private val MGBA_MAGIC = byteArrayOf(0x00, 0x00, 0x00, 0x01) // version magic LE
 
         val SEARCH_PATHS = listOf(
+            "/storage/emulated/0/RetroArch/states/mGBA",
+            "/sdcard/RetroArch/states/mGBA",
             "/storage/emulated/0/RetroArch/states",
             "/sdcard/RetroArch/states",
+            "/storage/emulated/0/Android/data/com.retroarch.aarch64/files/states/mGBA",
             "/storage/emulated/0/Android/data/com.retroarch.aarch64/files/states",
+            "/storage/emulated/0/Android/data/com.retroarch/files/states/mGBA",
             "/storage/emulated/0/Android/data/com.retroarch/files/states"
         )
     }
@@ -44,11 +48,23 @@ class SaveStateReader(private val context: Context) {
             val dir = File(path)
             if (!dir.exists()) continue
             val stateFiles = dir.listFiles { f ->
-                f.name.endsWith(".state0") || f.name.endsWith(".state") ||
                 f.name.contains(".state")
             } ?: continue
             if (stateFiles.isEmpty()) continue
-            // Just grab most recently modified — user can override in debug panel
+
+            // Prefer: Emerald Rogue .state.auto first (most recent auto-save)
+            val erAuto = stateFiles
+                .filter { it.name.contains("Emerald Rogue", ignoreCase = true) && it.name.endsWith(".state.auto") }
+                .maxByOrNull { it.lastModified() }
+            if (erAuto != null) return erAuto
+
+            // Then any Emerald Rogue state
+            val erAny = stateFiles
+                .filter { it.name.contains("Emerald Rogue", ignoreCase = true) }
+                .maxByOrNull { it.lastModified() }
+            if (erAny != null) return erAny
+
+            // Fall back to most recent
             return stateFiles.maxByOrNull { it.lastModified() }
         }
         return null
