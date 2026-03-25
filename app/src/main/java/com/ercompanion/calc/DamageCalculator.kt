@@ -73,7 +73,7 @@ object DamageCalculator {
         moveName: String = "Unknown"
     ): DamageResult {
         // Status moves or moves with 0 power
-        if (movePower == 0) {
+        if (movePower == 0 || defenseStat <= 0 || attackStat <= 0 || attackerLevel <= 0) {
             return DamageResult(
                 moveName = moveName,
                 minDamage = 0,
@@ -89,7 +89,7 @@ object DamageCalculator {
 
         // Base damage calculation: power * attack * (2 * level / 5 + 2) / defense / 50 + 2
         val levelMod = (2 * attackerLevel / 5 + 2)
-        var baseDamage = movePower * attackStat * levelMod / defenseStat / 50 + 2
+        var baseDamage = (movePower.toLong() * attackStat * levelMod / defenseStat / 50 + 2).toInt()
 
         // Apply burn (0.5x if physical and burned, unless Guts - we don't track abilities yet)
         if (isBurned) {
