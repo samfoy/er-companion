@@ -154,15 +154,70 @@ class SaveStateReader(private val context: Context) {
         return result
     }
 
-    private fun isValidMon(partyBytes: ByteArray, monOffset: Int): Boolean {
-        if (monOffset + 90 > partyBytes.size) return false
+    private fun computeChecksum(boxPokemon: ByteArray, offset: Int): UShort {
+        // Checksum = sum of 48 bytes of substruct data (offset 32..79) treated as u16s
+        var sum = 0
+        for (i in 0 until 24) {
+            val lo = boxPokemon[offset + 32 + i * 2].toInt() and 0xFF
+            val hi = boxPokemon[offset + 32 + i * 2 + 1].toInt() and 0xFF
+            sum += lo or (hi shl 8)
+        }
+        return (sum and 0xFFFF).toUShort()
+    }
 
-        // personality (offset 0) must be non-zero
-        val personality = (partyBytes[monOffset].toInt() and 0xFF) or
-                          ((partyBytes[monOffset+1].toInt() and 0xFF) shl 8) or
-                          ((partyBytes[monOffset+2].toInt() and 0xFF) shl 16) or
-                          ((partyBytes[monOffset+3].toInt() and 0xFF) shl 24)
-        if (personality == 0) return false
+    private fun decryptSubstruct0Species(boxPokemon: ByteArray, offset: Int): Int {
+        // XOR key = personality ^ otId
+        val personality = readU32LE(boxPokemon, offset + 0)
+        val otId = readU32LE(boxPokemon, offset + 4)
+        val key = personality xor otId
+
+        // Substruct order index = personality % 24
+        // Substruct 0 (species/item/etc) position depends on substructOrder
+        val substructOrder = arrayOf(
+            intArrayOf(0,1,2,3), intArrayOf(0,1,3,2), intArrayOf(0,2,1,3), intArrayOf(0,2,3,1),
+            intArrayOf(0,3,1,2), intArrayOf(0,3,2,1), intArrayOf(1,0,2,3), intArrayOf(1,0,3,2),
+            intArrayOf(1,2,0,3), intArrayOf(1,2,3,0), intArrayOf(1,3,0,2), intArrayOf(1,3,2,0),
+            intArrayOf(2,0,1,3), intArrayOf(2,0,3,1), intArrayOf(2,1,0,3), intArrayOf(2,1,3,0),
+            intArrayOf(2,3,0,1), intArrayOf(2,3,1,0), intArrayOf(3,0,1,2), intArrayOf(3,0,2,1),
+            intArrayOf(3,1,0,2), intArrayOf(3,1,2,0), intArrayOf(3,2,0,1), intArrayOf(3,2,1,0)
+        )
+        val orderIdx = (personality % 24).toInt()
+        val order = substructOrder[orderIdx]
+
+        // Find which position substruct 0 (species data) is at
+        val pos = order.indexOf(0)
+        val substructOffset = offset + 32 + pos * 12
+
+        // Decrypt: XOR each u32 with key
+        val decrypted = IntArray(3)
+        for (i in 0..2) {
+            val raw = readU32LE(boxPokemon, substructOffset + i * 4)
+            decrypted[i] = (raw xor key).toInt()
+        }
+
+        // PokemonSubstruct0: species is bits 0-10 of first u32
+        return decrypted[0] and 0x7FF
+    }
+
+    private fun readU32LE(buf: ByteArray, offset: Int): Long {
+        return ((buf[offset].toLong() and 0xFF)) or
+               ((buf[offset+1].toLong() and 0xFF) shl 8) or
+               ((buf[offset+2].toLong() and 0xFF) shl 16) or
+               ((buf[offset+3].toLong() and 0xFF) shl 24)
+    }
+
+    private fun isValidMon(partyBytes: ByteArray, monOffset: Int): Boolean {
+        if (monOffset + 104 > partyBytes.size) return false
+
+        // personality must be non-zero
+        val personality = readU32LE(partyBytes, monOffset + 0)
+        if (personality == 0L) return false
+
+        // Verify checksum
+        val storedChecksum = ((partyBytes[monOffset + 28].toInt() and 0xFF) or
+                              ((partyBytes[monOffset + 29].toInt() and 0xFF) shl 8)).toUShort()
+        val computedChecksum = computeChecksum(partyBytes, monOffset)
+        if (storedChecksum != computedChecksum) return false
 
         // level (offset 84, unencrypted) must be 1-100
         val level = partyBytes[monOffset + 84].toInt() and 0xFF
@@ -177,6 +232,10 @@ class SaveStateReader(private val context: Context) {
         val currentHP = (partyBytes[monOffset + 86].toInt() and 0xFF) or
                         ((partyBytes[monOffset + 87].toInt() and 0xFF) shl 8)
         if (currentHP > maxHP) return false
+
+        // Decrypt and validate species (1-1526 for ER)
+        val species = decryptSubstruct0Species(partyBytes, monOffset)
+        if (species !in 1..1526) return false
 
         return true
     }
