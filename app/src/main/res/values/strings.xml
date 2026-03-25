@@ -1,0 +1,4 @@
+<!-- res/values/strings.xml -->
+<resources>
+    <string name="app_name">ER Companion</string>
+</resources>

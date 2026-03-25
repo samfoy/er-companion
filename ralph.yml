@@ -1,0 +1,9 @@
+cli:
+  backend: "custom"
+  command: "/bin/zsh"
+  args: ["-il", "-c", "claude --permission-mode bypassPermissions --print \"$(cat PROMPT.md)\""]
+  prompt_flag: ""
+  prompt_mode: "none"
+event_loop:
+  prompt_file: "PROMPT.md"
+  completion_promise: "LOOP_COMPLETE"
