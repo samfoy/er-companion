@@ -37,7 +37,7 @@ object Gen3PokemonParser {
     fun parseParty(data: ByteArray, partyCount: Int): List<PartyMon?> {
         val party = mutableListOf<PartyMon?>()
 
-        for (i in 0 until minOf(partyCount, 12)) {
+        for (i in 0 until minOf(partyCount, 6)) {
             val offset = i * POKEMON_SIZE
             if (offset + POKEMON_SIZE > data.size) break
 

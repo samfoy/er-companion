@@ -17,12 +17,21 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.Coil
+import coil.ImageLoader
 import com.ercompanion.ui.MainScreen
 import com.ercompanion.ui.theme.ERCompanionTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Clear Coil disk cache once to bust any stale icon.png entries
+        val prefs = getSharedPreferences("er_companion", MODE_PRIVATE)
+        if (!prefs.getBoolean("cache_cleared_v2", false)) {
+            Coil.imageLoader(this).diskCache?.clear()
+            prefs.edit().putBoolean("cache_cleared_v2", true).apply()
+        }
 
         // Request storage permissions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
