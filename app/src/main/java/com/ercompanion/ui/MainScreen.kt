@@ -24,6 +24,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import coil.request.ImageRequest
 import com.ercompanion.MainViewModel
+import com.ercompanion.data.MoveData
 import com.ercompanion.data.PokemonData
 import com.ercompanion.network.RetroArchClient
 import com.ercompanion.parser.PartyMon
@@ -140,49 +141,11 @@ fun MainScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Enemy party (compact view at top)
-        if (enemyPartyState.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Enemy Party",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.Gray
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        enemyPartyState.forEachIndexed { index, enemyMon ->
-                            if (enemyMon != null) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    val speciesName = PokemonData.getSpeciesName(enemyMon.species)
-                                    AsyncImage(
-                                        model = SpriteUtils.getSpriteUrl(speciesName),
-                                        contentDescription = speciesName,
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                                        modifier = Modifier.size(40.dp)
-                                    )
-                                    Text(
-                                        text = "Lv.${enemyMon.level}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+        // Enemy lead card (slot 7 from save state = active enemy during battle)
+        val enemyLead = enemyPartyState.firstOrNull()
+        if (enemyLead != null) {
+            EnemyLeadCard(enemyLead = enemyLead, playerParty = partyState, viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         // Party display
@@ -203,9 +166,126 @@ fun MainScreen(
             ) {
                 partyState.forEachIndexed { index, mon ->
                     if (mon != null) {
-                        val enemyLead = enemyPartyState.firstOrNull()
                         PokemonCard(viewModel = viewModel, mon = mon, slotNumber = index + 1, enemyTarget = enemyLead)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: MainViewModel) {
+    val speciesName = PokemonData.getSpeciesName(enemyLead.species)
+    val types = PokemonData.getSpeciesTypes(enemyLead.species)
+    val typeNames = types.map { typeId ->
+        listOf("Normal","Fighting","Flying","Poison","Ground","Rock","Bug","Ghost","Steel",
+               "Fire","Water","Grass","Electric","Psychic","Ice","Dragon","Dark","Fairy"
+        ).getOrNull(typeId) ?: "?"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1A1A)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = SpriteUtils.getSpriteUrl(speciesName),
+                    contentDescription = speciesName,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(56.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "⚔ $speciesName",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF6B6B)
+                    )
+                    Text(
+                        text = "Lv.${enemyLead.level}  ${typeNames.joinToString("/")}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                }
+                // HP bar
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "${enemyLead.hp}/${enemyLead.maxHp} HP",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                    val hpFraction = if (enemyLead.maxHp > 0) enemyLead.hp.toFloat() / enemyLead.maxHp else 0f
+                    LinearProgressIndicator(
+                        progress = hpFraction,
+                        modifier = Modifier.width(80.dp).height(6.dp),
+                        color = when {
+                            hpFraction > 0.5f -> Color(0xFF4CAF50)
+                            hpFraction > 0.25f -> Color(0xFFFFEB3B)
+                            else -> Color(0xFFF44336)
+                        }
+                    )
+                }
+            }
+
+            // Enemy moves
+            if (enemyLead.moves.any { it != 0 }) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Moves:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    enemyLead.moves.filter { it != 0 }.forEach { moveId ->
+                        val moveData = PokemonData.getMoveData(moveId)
+                        val moveName = PokemonData.getMoveName(moveId)
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF3A2A2A)
+                        ) {
+                            Text(
+                                text = if (moveData != null && moveData.power > 0) "$moveName(${moveData.power})" else moveName,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                color = Color(0xFFFFAA88),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // "Can it OHKO me?" — best damage enemy can deal vs each of my mons
+            val playerLead = playerParty.firstOrNull { it != null }
+            if (playerLead != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = Color(0xFF3A2A2A))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Threat vs your lead:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                val bestEnemyDmg = enemyLead.moves.filter { it != 0 }.mapNotNull { moveId ->
+                    PokemonData.getMoveData(moveId)?.let { moveData ->
+                        if (moveData.power > 0) {
+                            val dmg = viewModel.calcDamage(enemyLead, playerLead, moveData)
+                            Triple(moveId, moveData, dmg)
+                        } else null
+                    }
+                }.maxByOrNull { it.third }
+
+                if (bestEnemyDmg != null) {
+                    val (moveId, moveData, dmg) = bestEnemyDmg
+                    val pct = if (playerLead.maxHp > 0) (dmg * 100 / playerLead.maxHp) else 0
+                    val moveName = PokemonData.getMoveName(moveId)
+                    val color = when {
+                        pct >= 100 -> Color(0xFFF44336)
+                        pct >= 50 -> Color(0xFFFFEB3B)
+                        else -> Color(0xFF4CAF50)
+                    }
+                    Text(
+                        text = "${PokemonData.getSpeciesName(playerLead.species)}: $moveName → $dmg dmg ($pct%)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = color
+                    )
                 }
             }
         }

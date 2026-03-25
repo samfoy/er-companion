@@ -88,17 +88,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             _partyState.value = party
                             _errorMessage.value = null
 
-                            // Read enemy party from save state using known offset
-                            val playerCountOffset = saveStateReader.cachedPartyOffset
-                            if (playerCountOffset >= 0) {
-                                val enemyData = saveStateReader.readEnemyPartyData(playerCountOffset)
-                                if (enemyData != null) {
-                                    val (enemyCount, enemyBytes) = enemyData
-                                    val enemyParty = Gen3PokemonParser.parseParty(enemyBytes, enemyCount)
-                                    _enemyPartyState.value = enemyParty
-                                } else {
-                                    _enemyPartyState.value = emptyList()
-                                }
+                            // Slot index 6 (7th slot) = enemy lead during battle in ER
+                            val rawBuf = saveStateReader.readRawPartyBuffer()
+                            if (rawBuf != null && rawBuf.size >= 7 * 104) {
+                                val enemyLead = Gen3PokemonParser.parseParty(rawBuf, 7).getOrNull(6)
+                                _enemyPartyState.value = if (enemyLead != null) listOf(enemyLead) else emptyList()
+                            } else {
+                                _enemyPartyState.value = emptyList()
                             }
                         } else {
                             _connectionState.value = RetroArchClient.ConnectionStatus.ERROR
@@ -185,6 +181,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun listAllStateFiles(): List<String> {
         return saveStateReader.listAllStateFiles()
+    }
+
+    fun calcDamage(attacker: com.ercompanion.parser.PartyMon, defender: com.ercompanion.parser.PartyMon, moveData: com.ercompanion.data.MoveData): Int {
+        val atkStat = if (moveData.category == 0) attacker.attack else attacker.spAttack
+        val defStat = if (moveData.category == 0) defender.defense else defender.spDefense
+        val attackerTypes = com.ercompanion.data.PokemonData.getSpeciesTypes(attacker.species)
+        val defenderTypes = com.ercompanion.data.PokemonData.getSpeciesTypes(defender.species)
+        val result = com.ercompanion.calc.DamageCalculator.calc(
+            attackerLevel = attacker.level,
+            attackStat = atkStat,
+            defenseStat = defStat,
+            movePower = moveData.power,
+            moveType = moveData.type,
+            attackerTypes = attackerTypes,
+            defenderTypes = defenderTypes,
+            targetMaxHP = defender.maxHp
+        )
+        return result.minDamage
     }
 
     fun refreshDebugLog() {

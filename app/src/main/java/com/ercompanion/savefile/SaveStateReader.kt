@@ -158,6 +158,19 @@ class SaveStateReader(private val context: Context) {
         return result
     }
 
+    // Returns the raw party buffer (12 slots × 104 bytes) at the cached offset.
+    // Slot index 6 (0-based) is the enemy lead during battle in ER.
+    fun readRawPartyBuffer(): ByteArray? {
+        val rawBytes = stateFile?.readBytes() ?: return null
+        val stateBytes = decompressIfNeeded(rawBytes) ?: return null
+        if (stateBytes.size < MGBA_STATE_SIZE) return null
+        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+        val offset = if (cachedPartyOffset >= 0) cachedPartyOffset else return null
+        val partyStart = offset + 4
+        if (partyStart + 12 * 104 > ewram.size) return null
+        return ewram.copyOfRange(partyStart, partyStart + 12 * 104)
+    }
+
     // Read enemy party from save state — gEnemyPartyCount is 1 byte after gPlayerPartyCount,
     // gEnemyParty starts at gPlayerParty + 12*104 bytes (max party size buffer)
     fun readEnemyPartyData(playerCountOffset: Int): Pair<Int, ByteArray>? {
