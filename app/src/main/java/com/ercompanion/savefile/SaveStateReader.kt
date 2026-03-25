@@ -39,7 +39,7 @@ class SaveStateReader(private val context: Context) {
     private var stateFile: File? = null
     private var manualOverride: Boolean = false
     private var lastModified: Long = 0L
-    private var cachedPartyOffset: Int = -1
+    var cachedPartyOffset: Int = -1
     var lastStatus: String = "Not started"
 
     fun findStateFile(): File? {
@@ -156,6 +156,32 @@ class SaveStateReader(private val context: Context) {
         val result = tryReadPartyAt(ewram, offset)!!
         lastStatus = "OK: ${file.name}, party=${result.first}, found at EWRAM+0x${offset.toString(16)}, ${(System.currentTimeMillis() - file.lastModified()) / 1000}s ago"
         return result
+    }
+
+    // Read enemy party from save state — gEnemyPartyCount is 1 byte after gPlayerPartyCount,
+    // gEnemyParty starts at gPlayerParty + 624 bytes
+    fun readEnemyPartyData(playerCountOffset: Int): Pair<Int, ByteArray>? {
+        val rawBytes = stateFile?.readBytes() ?: return null
+        val stateBytes = decompressIfNeeded(rawBytes) ?: return null
+        if (stateBytes.size < MGBA_STATE_SIZE) return null
+        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+
+        val enemyCountOffset = playerCountOffset + 1
+        val enemyPartyOffset = playerCountOffset + 4 + 624  // after count(4 aligned) + player party
+
+        if (enemyCountOffset >= ewram.size || enemyPartyOffset + 624 > ewram.size) return null
+
+        val count = ewram[enemyCountOffset].toInt() and 0xFF
+        if (count !in 1..6) return null
+
+        val partyBytes = ewram.copyOfRange(enemyPartyOffset, enemyPartyOffset + 624)
+        var validCount = 0
+        for (i in 0 until count) {
+            if (isValidMon(partyBytes, i * 104)) validCount++
+            else break
+        }
+        if (validCount == 0) return null
+        return Pair(validCount, partyBytes)
     }
 
     private fun computeChecksum(boxPokemon: ByteArray, offset: Int): UShort {

@@ -88,17 +88,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             _partyState.value = party
                             _errorMessage.value = null
 
-                            // Try to read enemy party data if we have addresses
-                            if (enemyPartyCountAddress == null || enemyPartyDataAddress == null) {
-                                // Try to find enemy party using UDP client as fallback
-                                val enemyAddresses = scanner.findEnemyPartyAddress()
-                                if (enemyAddresses != null) {
-                                    enemyPartyCountAddress = enemyAddresses.first
-                                    enemyPartyDataAddress = enemyAddresses.second
+                            // Read enemy party from save state using known offset
+                            val playerCountOffset = saveStateReader.cachedPartyOffset
+                            if (playerCountOffset >= 0) {
+                                val enemyData = saveStateReader.readEnemyPartyData(playerCountOffset)
+                                if (enemyData != null) {
+                                    val (enemyCount, enemyBytes) = enemyData
+                                    val enemyParty = Gen3PokemonParser.parseParty(enemyBytes, enemyCount)
+                                    _enemyPartyState.value = enemyParty
+                                } else {
+                                    _enemyPartyState.value = emptyList()
                                 }
-                            } else {
-                                // Read enemy party data via UDP
-                                readEnemyPartyData()
                             }
                         } else {
                             _connectionState.value = RetroArchClient.ConnectionStatus.ERROR
