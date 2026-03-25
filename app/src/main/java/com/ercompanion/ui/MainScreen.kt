@@ -159,12 +159,19 @@ fun MainScreen(
             // ── BATTLE LAYOUT: two-column ──────────────────────────────────────────
             val activeMon = if (activePlayerSlot >= 0) partyState.getOrNull(activePlayerSlot)
                             else partyState.firstOrNull { it != null }
+
+            // Track which bench mon is expanded (null = none)
+            var expandedBenchIndex by remember { mutableStateOf<Int?>(null) }
+            // Track which enemy mon is selected (default = lead)
+            var selectedEnemyIndex by remember { mutableStateOf(0) }
+            val selectedEnemy = enemyPartyState.getOrNull(selectedEnemyIndex) ?: enemyLead
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                // Left column: our team — active mon expanded, bench collapsed to chips
+                // Left column: our team
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -184,19 +191,40 @@ fun MainScreen(
                                     viewModel = viewModel,
                                     mon = mon,
                                     slotNumber = index + 1,
-                                    enemyTarget = enemyLead,
+                                    enemyTarget = selectedEnemy,
                                     isActive = true,
                                     showAiPrediction = false
                                 )
                             } else {
-                                BenchedMonChip(mon = mon, enemyTarget = enemyLead)
+                                val isExpanded = expandedBenchIndex == index
+                                if (isExpanded) {
+                                    PokemonCard(
+                                        viewModel = viewModel,
+                                        mon = mon,
+                                        slotNumber = index + 1,
+                                        enemyTarget = selectedEnemy,
+                                        isActive = false,
+                                        showAiPrediction = false,
+                                        defaultExpanded = true,
+                                        onHeaderClick = { expandedBenchIndex = null }
+                                    )
+                                } else {
+                                    BenchedMonChip(
+                                        mon = mon,
+                                        enemyTarget = selectedEnemy,
+                                        onClick = { expandedBenchIndex = index }
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Right column: enemy lead with AI prediction
-                Column(modifier = Modifier.weight(1f)) {
+                // Right column: enemy party
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
                         text = "ENEMY",
                         style = MaterialTheme.typography.labelSmall,
@@ -204,7 +232,24 @@ fun MainScreen(
                         fontSize = 10.sp,
                         modifier = Modifier.padding(bottom = 2.dp)
                     )
-                    EnemyLeadCard(enemyLead = enemyLead, activeMon = activeMon, viewModel = viewModel)
+                    enemyPartyState.forEachIndexed { idx, enemy ->
+                        if (enemy != null) {
+                            if (idx == selectedEnemyIndex) {
+                                EnemyLeadCard(
+                                    enemyLead = enemy,
+                                    activeMon = activeMon,
+                                    viewModel = viewModel
+                                )
+                            } else {
+                                // Collapsed enemy chip
+                                BenchedMonChip(
+                                    mon = enemy,
+                                    enemyTarget = activeMon,
+                                    onClick = { selectedEnemyIndex = idx }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -230,7 +275,7 @@ fun MainScreen(
 
 /** Compact chip for benched mons during battle — shows sprite, name, HP bar, damage calc summary */
 @Composable
-fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?) {
+fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)? = null) {
     val speciesName = PokemonData.getSpeciesName(mon.species)
     val hpFrac = if (mon.maxHp > 0) mon.hp.toFloat() / mon.maxHp else 0f
     val hpColor = when {
@@ -276,7 +321,9 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?) {
     } else null
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2A)),
         shape = RoundedCornerShape(8.dp)
     ) {
@@ -470,7 +517,7 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 }
 
 @Composable
-fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false, defaultExpanded: Boolean = false) {
+fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false, defaultExpanded: Boolean = false, onHeaderClick: (() -> Unit)? = null) {
     var expanded by remember(mon.species) { mutableStateOf(defaultExpanded || isActive) }
     var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
     val speciesName = PokemonData.getSpeciesName(mon.species)
@@ -479,7 +526,10 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded },
+            .clickable {
+                if (onHeaderClick != null && expanded) onHeaderClick()
+                else expanded = !expanded
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (isActive) Color(0xFF1A2A1A) else MaterialTheme.colorScheme.surface
         ),
