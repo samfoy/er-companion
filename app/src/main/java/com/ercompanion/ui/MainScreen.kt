@@ -35,6 +35,7 @@ fun MainScreen(
     enemyPartyState: List<PartyMon?>,
     scanningState: Boolean,
     errorMessage: String?,
+    debugLog: List<String>,
     onRescan: () -> Unit
 ) {
     Column(
@@ -111,8 +112,18 @@ fun MainScreen(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
+
+        // Debug panel
+        DebugPanel(
+            debugLog = debugLog,
+            currentHost = viewModel.debugHost,
+            currentPort = viewModel.debugPort,
+            onApply = { host, port -> viewModel.applyConnectionSettings(host, port) }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Enemy party (compact view at top)
         if (enemyPartyState.isNotEmpty()) {
@@ -510,5 +521,104 @@ fun StatItem(label: String, value: Int) {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+fun DebugPanel(
+    debugLog: List<String>,
+    currentHost: String,
+    currentPort: Int,
+    onApply: (String, Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var hostInput by remember { mutableStateOf(currentHost) }
+    var portInput by remember { mutableStateOf(currentPort.toString()) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🔧 Debug", style = MaterialTheme.typography.labelMedium, color = Color(0xFF888888))
+                Text(if (expanded) "▲" else "▼", color = Color(0xFF888888), fontSize = 10.sp)
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Host/port editor
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = hostInput,
+                        onValueChange = { hostInput = it },
+                        label = { Text("Host", fontSize = 10.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(2f),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color.White),
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = portInput,
+                        onValueChange = { portInput = it },
+                        label = { Text("Port", fontSize = 10.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color.White),
+                    )
+                    Button(
+                        onClick = {
+                            val port = portInput.toIntOrNull() ?: 55355
+                            onApply(hostInput, port)
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("Apply", fontSize = 11.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Log output
+                Text("Network Log:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .background(Color(0xFF0D0D0D), RoundedCornerShape(4.dp))
+                        .padding(6.dp)
+                ) {
+                    if (debugLog.isEmpty()) {
+                        Text("No traffic yet...", color = Color(0xFF444444), fontSize = 10.sp)
+                    } else {
+                        androidx.compose.foundation.lazy.LazyColumn {
+                            items(debugLog.size) { i ->
+                                val line = debugLog[debugLog.size - 1 - i] // newest first
+                                val color = when {
+                                    line.startsWith("✗") -> Color(0xFFFF6B6B)
+                                    line.startsWith("←") -> Color(0xFF6BCB77)
+                                    line.startsWith("→") -> Color(0xFF4ECDC4)
+                                    else -> Color(0xFF888888)
+                                }
+                                Text(line, color = color, fontSize = 9.sp, lineHeight = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

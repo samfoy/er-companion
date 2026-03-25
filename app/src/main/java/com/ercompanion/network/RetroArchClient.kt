@@ -8,9 +8,9 @@ import java.net.InetAddress
 import java.net.SocketTimeoutException
 
 class RetroArchClient(
-    private val host: String = "127.0.0.1",
-    private val port: Int = 55355,
-    private val timeoutMs: Int = 1000
+    var host: String = "127.0.0.1",
+    var port: Int = 55355,
+    private val timeoutMs: Int = 2000
 ) {
     enum class ConnectionStatus {
         DISCONNECTED,
@@ -18,13 +18,22 @@ class RetroArchClient(
         ERROR
     }
 
-    suspend fun readMemory(address: Long, numBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
+    // Debug log — last N entries
+    val debugLog = ArrayDeque<String>(50)
+
+    private fun log(msg: String) {
+        if (debugLog.size >= 50) debugLog.removeFirst()
+        debugLog.addLast(msg)
+        android.util.Log.d("RetroArchClient", msg)
+    }
+
+    private suspend fun sendCommand(command: String): String? = withContext(Dispatchers.IO) {
         try {
             val socket = DatagramSocket()
             socket.soTimeout = timeoutMs
 
-            // Format: READ_CORE_MEMORY <hex_address> <num_bytes>
-            val command = "READ_CORE_MEMORY ${address.toString(16)} $numBytes"
+            log("→ SEND [$host:$port] $command")
+
             val sendData = command.toByteArray()
             val sendPacket = DatagramPacket(
                 sendData,
@@ -32,71 +41,62 @@ class RetroArchClient(
                 InetAddress.getByName(host),
                 port
             )
-
             socket.send(sendPacket)
 
-            // Receive response
-            val receiveData = ByteArray(4096)
-            val receivePacket = DatagramPacket(receiveData, receiveData.size)
-            socket.receive(receivePacket)
-
-            val response = String(receivePacket.data, 0, receivePacket.length)
-            socket.close()
-
-            parseMemoryResponse(response, numBytes)
-        } catch (e: SocketTimeoutException) {
-            null
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    suspend fun getStatus(): ConnectionStatus = withContext(Dispatchers.IO) {
-        try {
-            val socket = DatagramSocket()
-            socket.soTimeout = timeoutMs
-
-            val command = "VERSION"
-            val sendData = command.toByteArray()
-            val sendPacket = DatagramPacket(
-                sendData,
-                sendData.size,
-                InetAddress.getByName(host),
-                port
-            )
-
-            socket.send(sendPacket)
-
-            val receiveData = ByteArray(256)
+            val receiveData = ByteArray(65536)
             val receivePacket = DatagramPacket(receiveData, receiveData.size)
             socket.receive(receivePacket)
             socket.close()
 
-            ConnectionStatus.CONNECTED
+            val response = String(receivePacket.data, 0, receivePacket.length).trim()
+            log("← RECV $response")
+            response
         } catch (e: SocketTimeoutException) {
-            ConnectionStatus.DISCONNECTED
+            log("✗ TIMEOUT after ${timeoutMs}ms")
+            null
         } catch (e: Exception) {
-            ConnectionStatus.ERROR
+            log("✗ ERROR ${e.javaClass.simpleName}: ${e.message}")
+            null
         }
     }
+
+    suspend fun readMemory(address: Long, numBytes: Int): ByteArray? {
+        val cmd = "READ_CORE_MEMORY ${address.toString(16)} $numBytes"
+        val response = sendCommand(cmd) ?: return null
+        return parseMemoryResponse(response, numBytes)
+    }
+
+    suspend fun getStatus(): ConnectionStatus {
+        // Try GET_STATUS first (more common), fall back to VERSION
+        var response = sendCommand("GET_STATUS")
+        if (response != null) return ConnectionStatus.CONNECTED
+
+        response = sendCommand("VERSION")
+        if (response != null) return ConnectionStatus.CONNECTED
+
+        // Last resort: try a harmless memory read
+        response = sendCommand("READ_CORE_MEMORY 0 1")
+        return if (response != null) ConnectionStatus.CONNECTED else ConnectionStatus.DISCONNECTED
+    }
+
+    fun getDebugLog(): List<String> = debugLog.toList()
 
     private fun parseMemoryResponse(response: String, expectedBytes: Int): ByteArray? {
-        // Response format: READ_CORE_MEMORY <hex_address> <hex_byte1> <hex_byte2> ...
         val parts = response.trim().split("\\s+".toRegex())
         if (parts.size < 3 || parts[0] != "READ_CORE_MEMORY") {
+            log("✗ PARSE FAIL: unexpected format: $response")
             return null
         }
-
-        // Skip command name and address, parse hex bytes
+        // Check for error response
+        if (parts[2] == "-1" || parts[2].startsWith("error")) {
+            log("✗ READ ERROR from RetroArch: $response")
+            return null
+        }
         val hexBytes = parts.drop(2)
-        if (hexBytes.size < expectedBytes) {
-            return null
-        }
-
         return try {
             hexBytes.take(expectedBytes).map { it.toInt(16).toByte() }.toByteArray()
         } catch (e: NumberFormatException) {
+            log("✗ PARSE FAIL: bad hex in response")
             null
         }
     }

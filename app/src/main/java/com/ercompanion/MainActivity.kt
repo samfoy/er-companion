@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
                     val enemyPartyState by viewModel.enemyPartyState.collectAsState()
                     val scanningState by viewModel.scanningState.collectAsState()
                     val errorMessage by viewModel.errorMessage.collectAsState()
+                    val debugLog by viewModel.debugLog.collectAsState()
 
                     MainScreen(
                         viewModel = viewModel,
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
                         enemyPartyState = enemyPartyState,
                         scanningState = scanningState,
                         errorMessage = errorMessage,
+                        debugLog = debugLog,
                         onRescan = { viewModel.rescan() }
                     )
                 }

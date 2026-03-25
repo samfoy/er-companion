@@ -37,6 +37,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _debugLog = MutableStateFlow<List<String>>(emptyList())
+    val debugLog: StateFlow<List<String>> = _debugLog.asStateFlow()
+
+    var debugHost: String = "127.0.0.1"
+    var debugPort: Int = 55355
+
     private val _buildsLoaded = MutableStateFlow(false)
     val buildsLoaded: StateFlow<Boolean> = _buildsLoaded.asStateFlow()
 
@@ -122,6 +128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     e.printStackTrace()
                 }
 
+                refreshDebugLog()
                 delay(500) // Poll every 500ms
             }
         }
@@ -192,6 +199,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         enemyPartyDataAddress = null
         scanner.clearCache()
         _errorMessage.value = "Rescanning..."
+    }
+
+    fun applyConnectionSettings(host: String, port: Int) {
+        client.host = host
+        client.port = port
+        debugHost = host
+        debugPort = port
+        rescan()
+    }
+
+    fun refreshDebugLog() {
+        _debugLog.value = client.getDebugLog()
     }
 
     override fun onCleared() {
