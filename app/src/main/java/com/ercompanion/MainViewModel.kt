@@ -92,7 +92,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             val rawBuf = saveStateReader.readRawPartyBuffer()
                             if (rawBuf != null && rawBuf.size >= 7 * 104) {
                                 val enemyLead = Gen3PokemonParser.parseParty(rawBuf, 7).getOrNull(6)
-                                _enemyPartyState.value = if (enemyLead != null) listOf(enemyLead) else emptyList()
+                                // Only show enemy card if it looks like an active battle mon
+                                // (has valid species, non-zero HP, non-zero level)
+                                val isValidEnemy = enemyLead != null
+                                    && enemyLead.species > 0
+                                    && enemyLead.level > 0
+                                    && enemyLead.maxHp > 0
+                                _enemyPartyState.value = if (isValidEnemy) listOf(enemyLead!!) else emptyList()
                             } else {
                                 _enemyPartyState.value = emptyList()
                             }

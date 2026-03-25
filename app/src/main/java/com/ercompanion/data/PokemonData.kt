@@ -576,7 +576,115 @@ object PokemonData {
         350 to MoveData("Rock Blast", 25, 5, 0),
         351 to MoveData("Shock Wave", 60, 12, 1),
         352 to MoveData("Water Pulse", 60, 10, 1),
-        354 to MoveData("Psycho Boost", 140, 13, 1)
+        354 to MoveData("Psycho Boost", 140, 13, 1),
+        // Gen 4 moves (355-467)
+        355 to MoveData("Roost", 0, 2, 2),
+        358 to MoveData("Wake-Up Slap", 70, 1, 0),
+        359 to MoveData("Hammer Arm", 100, 1, 0),
+        360 to MoveData("Gyro Ball", 150, 8, 0), // variable power, max shown
+        362 to MoveData("Brine", 65, 10, 1),
+        364 to MoveData("Feint", 30, 0, 0),
+        365 to MoveData("Pluck", 60, 2, 0),
+        368 to MoveData("Metal Burst", 0, 8, 0),
+        369 to MoveData("U-turn", 70, 6, 0),
+        370 to MoveData("Close Combat", 120, 1, 0),
+        371 to MoveData("Payback", 50, 16, 0),  // doubles to 100 if user moves last
+        372 to MoveData("Assurance", 60, 16, 0), // doubles if target already took damage
+        374 to MoveData("Fling", 10, 16, 0), // variable power
+        378 to MoveData("Wring Out", 120, 0, 1), // variable power
+        386 to MoveData("Punishment", 60, 16, 0), // variable power
+        387 to MoveData("Last Resort", 140, 0, 0),
+        389 to MoveData("Sucker Punch", 70, 16, 0),
+        394 to MoveData("Flare Blitz", 120, 9, 0),
+        395 to MoveData("Force Palm", 60, 1, 0),
+        396 to MoveData("Aura Sphere", 80, 1, 1),
+        398 to MoveData("Poison Jab", 80, 3, 0),
+        399 to MoveData("Dark Pulse", 80, 16, 1),
+        400 to MoveData("Night Slash", 70, 16, 0),
+        401 to MoveData("Aqua Tail", 90, 10, 0),
+        402 to MoveData("Seed Bomb", 80, 11, 0),
+        403 to MoveData("Air Slash", 75, 2, 1),
+        404 to MoveData("X-Scissor", 80, 6, 0),
+        405 to MoveData("Bug Buzz", 90, 6, 1),
+        406 to MoveData("Dragon Pulse", 85, 15, 1),
+        407 to MoveData("Dragon Rush", 100, 15, 0),
+        408 to MoveData("Power Gem", 80, 5, 1),
+        409 to MoveData("Drain Punch", 75, 1, 0),
+        410 to MoveData("Vacuum Wave", 40, 1, 1),
+        411 to MoveData("Focus Blast", 120, 1, 1),
+        412 to MoveData("Energy Ball", 90, 11, 1),
+        413 to MoveData("Brave Bird", 120, 2, 0),
+        414 to MoveData("Earth Power", 90, 4, 1),
+        416 to MoveData("Giga Impact", 150, 0, 0),
+        418 to MoveData("Bullet Punch", 40, 8, 0),
+        419 to MoveData("Avalanche", 60, 14, 0), // doubles if hit first
+        420 to MoveData("Ice Shard", 40, 14, 0),
+        421 to MoveData("Shadow Claw", 70, 7, 0),
+        422 to MoveData("Thunder Fang", 65, 12, 0),
+        423 to MoveData("Ice Fang", 65, 14, 0),
+        424 to MoveData("Fire Fang", 65, 9, 0),
+        425 to MoveData("Shadow Sneak", 40, 7, 0),
+        426 to MoveData("Mud Bomb", 65, 4, 1),
+        427 to MoveData("Psycho Cut", 70, 13, 0),
+        428 to MoveData("Zen Headbutt", 80, 13, 0),
+        429 to MoveData("Mirror Shot", 65, 8, 1),
+        430 to MoveData("Flash Cannon", 80, 8, 1),
+        431 to MoveData("Rock Climb", 90, 0, 0),
+        434 to MoveData("Draco Meteor", 130, 15, 1),
+        435 to MoveData("Discharge", 80, 12, 1),
+        436 to MoveData("Lava Plume", 80, 9, 1),
+        437 to MoveData("Leaf Storm", 130, 11, 1),
+        438 to MoveData("Power Whip", 120, 11, 0),
+        440 to MoveData("Cross Poison", 70, 3, 0),
+        441 to MoveData("Gunk Shot", 120, 3, 0),
+        442 to MoveData("Iron Head", 80, 8, 0),
+        443 to MoveData("Magnet Bomb", 60, 8, 0),
+        444 to MoveData("Stone Edge", 100, 5, 0),
+        447 to MoveData("Grass Knot", 60, 11, 1), // variable power
+        451 to MoveData("Charge Beam", 50, 12, 1),
+        452 to MoveData("Wood Hammer", 120, 11, 0),
+        453 to MoveData("Aqua Jet", 40, 10, 0),
+        457 to MoveData("Head Smash", 150, 5, 0),
+        458 to MoveData("Double Hit", 35, 0, 0),
+        460 to MoveData("Spacial Rend", 100, 15, 1),
+        462 to MoveData("Crush Grip", 100, 0, 0), // variable power
+        463 to MoveData("Magma Storm", 100, 9, 1),
+        465 to MoveData("Seed Flare", 120, 11, 1),
+        467 to MoveData("Shadow Force", 120, 7, 0),
+        // Gen 5 moves (468-559)
+        473 to MoveData("Psyshock", 80, 13, 1),
+        474 to MoveData("Venoshock", 65, 3, 1), // doubles if poisoned
+        479 to MoveData("Smack Down", 50, 5, 0),
+        480 to MoveData("Storm Throw", 60, 1, 0), // always crits
+        482 to MoveData("Sludge Wave", 95, 3, 1),
+        483 to MoveData("Quiver Dance", 0, 6, 2),
+        484 to MoveData("Heavy Slam", 80, 8, 0), // variable power
+        486 to MoveData("Electro Ball", 60, 12, 1), // variable power
+        488 to MoveData("Flame Charge", 50, 9, 0),
+        490 to MoveData("Low Sweep", 65, 1, 0),
+        491 to MoveData("Acid Spray", 40, 3, 1),
+        492 to MoveData("Foul Play", 95, 16, 0),
+        496 to MoveData("Round", 60, 0, 1),
+        498 to MoveData("Chip Away", 70, 0, 0),
+        503 to MoveData("Scald", 80, 10, 1),
+        506 to MoveData("Hex", 65, 7, 1), // doubles if status
+        508 to MoveData("Shift Gear", 0, 8, 2),
+        509 to MoveData("Circle Throw", 60, 1, 0),
+        512 to MoveData("Acrobatics", 55, 2, 0), // doubles without item
+        521 to MoveData("Volt Switch", 70, 12, 1),
+        522 to MoveData("Struggle Bug", 50, 6, 1),
+        523 to MoveData("Bulldoze", 60, 4, 0),
+        524 to MoveData("Frost Breath", 60, 14, 1), // always crits
+        525 to MoveData("Dragon Tail", 60, 15, 0),
+        528 to MoveData("Wild Charge", 90, 12, 0),
+        529 to MoveData("Drill Run", 80, 4, 0),
+        532 to MoveData("Horn Leech", 75, 11, 0),
+        533 to MoveData("Sacred Sword", 90, 1, 0),
+        534 to MoveData("Razor Shell", 75, 10, 0),
+        542 to MoveData("Hurricane", 110, 2, 1),
+        550 to MoveData("Bolt Strike", 130, 12, 0),
+        551 to MoveData("Blue Flare", 130, 9, 1),
+        557 to MoveData("V-create", 180, 9, 0)
     )
 
     // Species types: species ID -> list of type IDs

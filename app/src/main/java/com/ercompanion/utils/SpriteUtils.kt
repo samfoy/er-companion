@@ -1,5 +1,10 @@
 package com.ercompanion.utils
 
+import android.graphics.Bitmap
+import androidx.core.graphics.createBitmap
+import coil.size.Size
+import coil.transform.Transformation
+
 object SpriteUtils {
     private const val SPRITE_BASE_URL = "https://raw.githubusercontent.com/DepressoMocha/emerogue/moka-dev/graphics/pokemon"
 
@@ -23,3 +28,15 @@ object SpriteUtils {
     const val PLACEHOLDER_SPRITE = "https://raw.githubusercontent.com/DepressoMocha/emerogue/moka-dev/graphics/pokemon/bulbasaur/anim_front.png"
 }
 
+/**
+ * Coil Transformation that crops the top half of an image.
+ * ER's anim_front.png is 64x128: top 64px = front sprite, bottom 64px = back sprite.
+ */
+class TopHalfCropTransformation : Transformation {
+    override val cacheKey: String = "top_half_crop"
+
+    override suspend fun transform(input: Bitmap, size: Size): Bitmap {
+        val halfHeight = input.height / 2
+        return Bitmap.createBitmap(input, 0, 0, input.width, halfHeight)
+    }
+}

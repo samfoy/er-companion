@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.ercompanion.MainViewModel
 import com.ercompanion.data.MoveData
 import com.ercompanion.data.PokemonData
@@ -32,6 +33,7 @@ import com.ercompanion.ui.theme.HPGreen
 import com.ercompanion.ui.theme.HPRed
 import com.ercompanion.ui.theme.HPYellow
 import com.ercompanion.utils.SpriteUtils
+import com.ercompanion.utils.TopHalfCropTransformation
 
 @Composable
 fun MainScreen(
@@ -200,8 +202,12 @@ fun EnemyLeadCard(enemyLead: PartyMon, playerParty: List<PartyMon?>, viewModel: 
         Column(modifier = Modifier.padding(12.dp)) {
             // Header: sprite + name/type + HP bar
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val ctx = LocalContext.current
                 AsyncImage(
-                    model = SpriteUtils.getSpriteUrl(speciesName),
+                    model = ImageRequest.Builder(ctx)
+                        .data(SpriteUtils.getSpriteUrl(speciesName))
+                        .transformations(TopHalfCropTransformation())
+                        .build(),
                     contentDescription = speciesName,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(56.dp)
@@ -332,8 +338,12 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         color = Color.Gray,
                         modifier = Modifier.padding(end = 8.dp)
                     )
+                    val ctx = LocalContext.current
                     AsyncImage(
-                        model = SpriteUtils.getSpriteUrl(speciesName),
+                        model = ImageRequest.Builder(ctx)
+                            .data(SpriteUtils.getSpriteUrl(speciesName))
+                            .transformations(TopHalfCropTransformation())
+                            .build(),
                         contentDescription = speciesName,
                         contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                         modifier = Modifier
