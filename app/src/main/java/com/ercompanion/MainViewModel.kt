@@ -183,9 +183,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return saveStateReader.getSearchedPaths()
     }
 
+    fun listAllStateFiles(): List<String> {
+        return saveStateReader.listAllStateFiles()
+    }
+
     fun refreshDebugLog() {
         val statusLines = mutableListOf<String>()
         statusLines.add(saveStateReader.getStatus())
+        statusLines.addAll(saveStateReader.listAllStateFiles())
         _debugLog.value = statusLines
     }
 

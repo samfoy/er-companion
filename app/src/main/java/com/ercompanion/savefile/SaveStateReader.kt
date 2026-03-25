@@ -38,27 +38,38 @@ class SaveStateReader(private val context: Context) {
     var lastStatus: String = "Not started"
 
     fun findStateFile(): File? {
-        // ER ROM names to prefer (case-insensitive contains check)
-        val erKeywords = listOf("emerald", "rogue", "emerogue", "er_", "pokeemerald")
-
         for (path in SEARCH_PATHS) {
             val dir = File(path)
             if (!dir.exists()) continue
             val stateFiles = dir.listFiles { f ->
-                f.name.endsWith(".state0") || f.name.endsWith(".state")
+                f.name.endsWith(".state0") || f.name.endsWith(".state") ||
+                f.name.contains(".state")
             } ?: continue
             if (stateFiles.isEmpty()) continue
-
-            // Prefer ER-named files first
-            val erFile = stateFiles
-                .filter { f -> erKeywords.any { kw -> f.name.lowercase().contains(kw) } }
-                .maxByOrNull { it.lastModified() }
-            if (erFile != null) return erFile
-
-            // Fall back to most recently modified
+            // Just grab most recently modified — user can override in debug panel
             return stateFiles.maxByOrNull { it.lastModified() }
         }
         return null
+    }
+
+    fun listAllStateFiles(): List<String> {
+        val results = mutableListOf<String>()
+        for (path in SEARCH_PATHS) {
+            val dir = File(path)
+            if (!dir.exists()) {
+                results.add("$path — not found")
+                continue
+            }
+            val files = dir.listFiles() ?: continue
+            if (files.isEmpty()) {
+                results.add("$path — empty")
+            } else {
+                files.sortedByDescending { it.lastModified() }.take(5).forEach {
+                    results.add("${it.name} (${it.length()/1024}KB)")
+                }
+            }
+        }
+        return results
     }
 
     fun hasNewData(): Boolean {
