@@ -10,7 +10,7 @@ import java.util.zip.Inflater
 class SaveStateReader(private val context: Context) {
 
     companion object {
-        const val MGBA_STATE_SIZE = 0x61000L   // 397,312 bytes uncompressed
+        const val MGBA_STATE_SIZE = 0x50000L   // 327,680 bytes — conservative min (actual is ~396KB-540KB)
         const val EWRAM_OFFSET    = 0x21000L
         const val PARTY_COUNT_ADDR = 0x020244ECL
         const val PARTY_DATA_ADDR  = 0x020244F0L
@@ -214,6 +214,12 @@ class SaveStateReader(private val context: Context) {
             return tryRzipDecompress(data)
         }
 
+        // Large raw file that might be an mGBA state without magic match
+        if (data.size >= MGBA_STATE_SIZE) {
+            lastStatus = "Large unrecognized format (${data.size} bytes) — trying as raw"
+            return data
+        }
+
         // Standard zlib
         if (data[0] == 0x78.toByte()) {
             tryZlibDecompress(data)?.let { return it }
@@ -247,14 +253,19 @@ class SaveStateReader(private val context: Context) {
                                    ((data[18].toLong() and 0xFF) shl 48) or
                                    ((data[19].toLong() and 0xFF) shl 56)
 
-            lastStatus = "RZIP: chunkSize=$chunkSize uncompressed=${uncompressedSize}B"
+            lastStatus = "RZIP: chunk=$chunkSize uncompressed=${uncompressedSize}B file=${data.size}B"
+
+            // If uncompressed size == (file size - 20), it's stored uncompressed after header
+            if (uncompressedSize == (data.size - 20).toLong()) {
+                lastStatus = "RZIP uncompressed: ${uncompressedSize}B"
+                return data.copyOfRange(20, data.size)
+            }
 
             val baos = ByteArrayOutputStream(uncompressedSize.toInt())
-            var pos = 20 // skip header
+            var pos = 20
 
             while (pos < data.size) {
                 if (pos + 4 > data.size) break
-                // Each chunk: 4-byte compressed size (uint32 LE) + zlib data
                 val compChunkSize = ((data[pos].toInt() and 0xFF)) or
                                     ((data[pos+1].toInt() and 0xFF) shl 8) or
                                     ((data[pos+2].toInt() and 0xFF) shl 16) or
@@ -266,10 +277,9 @@ class SaveStateReader(private val context: Context) {
                 val chunkData = data.copyOfRange(pos, pos + compChunkSize)
                 pos += compChunkSize
 
-                // Decompress this chunk with zlib
                 val inflater = Inflater()
                 inflater.setInput(chunkData)
-                val outBuf = ByteArray(chunkSize * 2)
+                val outBuf = ByteArray(chunkSize * 2 + 11)
                 val n = inflater.inflate(outBuf)
                 inflater.end()
                 baos.write(outBuf, 0, n)
@@ -277,7 +287,7 @@ class SaveStateReader(private val context: Context) {
 
             val result = baos.toByteArray()
             if (result.size >= MGBA_STATE_SIZE) result else {
-                lastStatus = "RZIP decoded ${result.size} bytes, expected >= $MGBA_STATE_SIZE"
+                lastStatus = "RZIP decoded ${result.size}B, expected >=${MGBA_STATE_SIZE}B"
                 null
             }
         } catch (e: Exception) {
