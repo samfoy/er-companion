@@ -144,43 +144,162 @@ fun MainScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Enemy lead card (slot 7 from save state = active enemy during battle)
         val enemyLead = enemyPartyState.firstOrNull()
-        if (enemyLead != null) {
-            // AI predictions target the currently active player mon
-            val activeMon = if (activePlayerSlot >= 0) partyState.getOrNull(activePlayerSlot) else partyState.firstOrNull { it != null }
-            EnemyLeadCard(enemyLead = enemyLead, activeMon = activeMon, viewModel = viewModel)
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        val inBattle = enemyLead != null
 
-        // Party display
         if (partyState.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = if (scanningState) "Scanning..." else "No party data",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.Gray
                 )
             }
-        } else {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        } else if (inBattle && enemyLead != null) {
+            // ── BATTLE LAYOUT: two-column ──────────────────────────────────────────
+            val activeMon = if (activePlayerSlot >= 0) partyState.getOrNull(activePlayerSlot)
+                            else partyState.firstOrNull { it != null }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
             ) {
+                // Left column: our team — active mon expanded, bench collapsed to chips
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "YOUR TEAM",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                    partyState.forEachIndexed { index, mon ->
+                        if (mon != null) {
+                            val isActive = index == activePlayerSlot
+                            if (isActive) {
+                                PokemonCard(
+                                    viewModel = viewModel,
+                                    mon = mon,
+                                    slotNumber = index + 1,
+                                    enemyTarget = enemyLead,
+                                    isActive = true,
+                                    showAiPrediction = false
+                                )
+                            } else {
+                                BenchedMonChip(mon = mon, enemyTarget = enemyLead)
+                            }
+                        }
+                    }
+                }
+
+                // Right column: enemy lead with AI prediction
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "ENEMY",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFAA4444),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                    EnemyLeadCard(enemyLead = enemyLead, activeMon = activeMon, viewModel = viewModel)
+                }
+            }
+        } else {
+            // ── OUT-OF-BATTLE LAYOUT: single column, builds collapsed ──────────────
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 partyState.forEachIndexed { index, mon ->
                     if (mon != null) {
-                        val isActive = index == activePlayerSlot
                         PokemonCard(
                             viewModel = viewModel,
                             mon = mon,
                             slotNumber = index + 1,
-                            enemyTarget = enemyLead,
-                            isActive = isActive,
-                            showAiPrediction = isActive
+                            enemyTarget = null,
+                            isActive = false,
+                            showAiPrediction = false,
+                            defaultExpanded = false
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Compact chip for benched mons during battle — shows sprite, name, HP bar, damage calc summary */
+@Composable
+fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?) {
+    val speciesName = PokemonData.getSpeciesName(mon.species)
+    val hpFrac = if (mon.maxHp > 0) mon.hp.toFloat() / mon.maxHp else 0f
+    val hpColor = when {
+        hpFrac > 0.5f -> HPGreen
+        hpFrac > 0.2f -> HPYellow
+        else -> HPRed
+    }
+    // Best move damage vs enemy
+    val bestDmgPct = if (enemyTarget != null) {
+        mon.moves.filter { it != 0 }.mapNotNull { moveId ->
+            val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
+            if (md.power == 0) return@mapNotNull null
+            val atkStat = if (md.category == 0) mon.attack else mon.spAttack
+            val defStat = if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense
+            val result = com.ercompanion.calc.DamageCalculator.calc(
+                mon.level, atkStat, defStat, md.power, md.type,
+                PokemonData.getSpeciesTypes(mon.species),
+                PokemonData.getSpeciesTypes(enemyTarget.species),
+                enemyTarget.maxHp
+            )
+            if (enemyTarget.maxHp > 0) (result.maxDamage * 100 / enemyTarget.maxHp) else 0
+        }.maxOrNull()
+    } else null
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2A)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val ctx = LocalContext.current
+            AsyncImage(
+                model = ImageRequest.Builder(ctx)
+                    .data(SpriteUtils.getSpriteUrl(speciesName))
+                    .transformations(TopHalfCropTransformation())
+                    .build(),
+                contentDescription = speciesName,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(speciesName, style = MaterialTheme.typography.labelMedium, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Lv${mon.level}", style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontSize = 10.sp)
+                }
+                // HP bar
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)).background(Color.DarkGray)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(hpFrac.coerceIn(0f, 1f))
+                            .fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(hpColor)
+                    )
+                }
+                if (bestDmgPct != null && bestDmgPct > 0) {
+                    val color = when {
+                        bestDmgPct >= 100 -> HPRed
+                        bestDmgPct >= 50  -> HPYellow
+                        else              -> Color.Gray
+                    }
+                    Text("⚔ ${bestDmgPct}%", style = MaterialTheme.typography.labelSmall, color = color, fontSize = 10.sp)
                 }
             }
         }
@@ -316,8 +435,9 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 }
 
 @Composable
-fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false) {
-    var expanded by remember { mutableStateOf(false) }
+fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false, defaultExpanded: Boolean = false) {
+    var expanded by remember(mon.species) { mutableStateOf(defaultExpanded || isActive) }
+    var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
     val speciesName = PokemonData.getSpeciesName(mon.species)
     val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
 
@@ -465,57 +585,49 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         StatItem("EXP", mon.experience)
                     }
 
-                    // Recommended build
+                    // Recommended build — collapsed by default
                     if (pokemonBuild != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 8.dp))
-
-                        Text(
-                            text = "Recommended Build",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        if (pokemonBuild.notes != null) {
-                            Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider(color = Color.DarkGray)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { buildsExpanded = !buildsExpanded }
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = pokemonBuild.notes,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
+                                text = "Recommended Build",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (buildsExpanded) "▲" else "▼",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = Color.Gray
                             )
                         }
-
-                        if (pokemonBuild.recommendedMoves.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Suggested moves:",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                color = Color.Gray
-                            )
-                            Column(modifier = Modifier.padding(start = 8.dp)) {
-                                pokemonBuild.recommendedMoves.forEach { moveName ->
-                                    Text(
-                                        text = "• $moveName",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(vertical = 1.dp)
-                                    )
+                        AnimatedVisibility(visible = buildsExpanded) {
+                            Column {
+                                if (pokemonBuild.notes != null) {
+                                    Text(pokemonBuild.notes, style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, color = Color.Gray)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                }
+                                if (pokemonBuild.recommendedMoves.isNotEmpty()) {
+                                    Text("Suggested moves:", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = Color.Gray)
+                                    Column(modifier = Modifier.padding(start = 8.dp, top = 2.dp)) {
+                                        pokemonBuild.recommendedMoves.forEach { moveName ->
+                                            Text("• $moveName", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 1.dp))
+                                        }
+                                    }
+                                }
+                                if (pokemonBuild.recommendedItem != null) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Item: ${pokemonBuild.recommendedItem}", style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
-                        }
-
-                        if (pokemonBuild.recommendedItem != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Item: ${pokemonBuild.recommendedItem}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
                         }
                     }
 
