@@ -159,13 +159,36 @@ class SaveStateReader(private val context: Context) {
         if (offset < 0 || offset + 4 + 624 > ewram.size) return null
         val count = ewram[offset].toInt() and 0xFF
         if (count !in 1..6) return null
+
         val partyBytes = ewram.copyOfRange(offset + 4, offset + 4 + 624)
-        // Quick sanity: first mon should have non-zero personality
-        val personality = (partyBytes[0].toInt() and 0xFF) or
-                          ((partyBytes[1].toInt() and 0xFF) shl 8) or
-                          ((partyBytes[2].toInt() and 0xFF) shl 16) or
-                          ((partyBytes[3].toInt() and 0xFF) shl 24)
-        if (personality == 0) return null
+
+        // Validate each mon in the party using unencrypted fields in struct Pokemon:
+        // BoxPokemon is 80 bytes, then: status(4), level(1), mail(1), hp(2), maxHP(2)...
+        // level is at offset 84 within each 104-byte Pokemon struct
+        var validCount = 0
+        for (i in 0 until count) {
+            val monOffset = i * 104
+            if (monOffset + 90 > partyBytes.size) return null
+
+            // personality (offset 0, u32) must be non-zero
+            val personality = (partyBytes[monOffset].toInt() and 0xFF) or
+                              ((partyBytes[monOffset+1].toInt() and 0xFF) shl 8) or
+                              ((partyBytes[monOffset+2].toInt() and 0xFF) shl 16) or
+                              ((partyBytes[monOffset+3].toInt() and 0xFF) shl 24)
+            if (personality == 0) return null
+
+            // level (offset 84, unencrypted u8) must be 1-100
+            val level = partyBytes[monOffset + 84].toInt() and 0xFF
+            if (level !in 1..100) return null
+
+            // maxHP (offset 88, u16) must be > 0 and sane (< 1000)
+            val maxHP = (partyBytes[monOffset + 88].toInt() and 0xFF) or
+                        ((partyBytes[monOffset + 89].toInt() and 0xFF) shl 8)
+            if (maxHP == 0 || maxHP > 999) return null
+
+            validCount++
+        }
+        if (validCount != count) return null
         return Pair(count, partyBytes)
     }
 
