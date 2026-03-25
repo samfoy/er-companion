@@ -41,6 +41,8 @@ class SaveStateReader(private val context: Context) {
     private var lastModified: Long = 0L
     var cachedPartyOffset: Int = -1
     var lastStatus: String = "Not started"
+    // Cached EWRAM from last successful decompress — reused by all readers in same poll cycle
+    private var cachedEwram: ByteArray? = null
 
     fun findStateFile(): File? {
         for (path in SEARCH_PATHS) {
@@ -127,8 +129,9 @@ class SaveStateReader(private val context: Context) {
             return null
         }
 
-        // Extract EWRAM (256KB starting at 0x21000)
+        // Extract EWRAM (256KB starting at 0x21000) and cache it for this poll cycle
         val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+        cachedEwram = ewram
 
         // Try cached offset first
         if (cachedPartyOffset >= 0) {
@@ -159,10 +162,7 @@ class SaveStateReader(private val context: Context) {
     }
 
     fun readRawPartyBuffer(): ByteArray? {
-        val rawBytes = stateFile?.readBytes() ?: return null
-        val stateBytes = decompressIfNeeded(rawBytes) ?: return null
-        if (stateBytes.size < MGBA_STATE_SIZE) return null
-        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+        val ewram = cachedEwram ?: return null
         val offset = if (cachedPartyOffset >= 0) cachedPartyOffset else return null
         val partyStart = offset + 4
         if (partyStart + 12 * 104 > ewram.size) return null
@@ -171,14 +171,10 @@ class SaveStateReader(private val context: Context) {
 
     /**
      * Returns true only if gBattlersCount == 2 (singles battle in progress).
-     * This is the authoritative in-battle signal — enemy party memory is stale
-     * after battles end so never show enemy UI when this returns false.
+     * Uses cached EWRAM from the current poll cycle — must be called after readPartyData().
      */
     fun readInBattle(): Boolean {
-        val rawBytes = stateFile?.readBytes() ?: return false
-        val stateBytes = decompressIfNeeded(rawBytes) ?: return false
-        if (stateBytes.size < MGBA_STATE_SIZE) return false
-        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+        val ewram = cachedEwram ?: return false
         val BATTLERS_COUNT_OFFSET = 0x1839c
         if (BATTLERS_COUNT_OFFSET >= ewram.size) return false
         return ewram[BATTLERS_COUNT_OFFSET].toInt() and 0xFF == 2
@@ -192,18 +188,11 @@ class SaveStateReader(private val context: Context) {
      * Returns -1 if not in battle (gBattlersCount != 2).
      */
     fun readActivePlayerSlot(): Int {
-        val rawBytes = stateFile?.readBytes() ?: return -1
-        val stateBytes = decompressIfNeeded(rawBytes) ?: return -1
-        if (stateBytes.size < MGBA_STATE_SIZE) return -1
-        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
-
-        // Confirmed: gBattlersCount at EWRAM+0x1839c
+        val ewram = cachedEwram ?: return -1
         val BATTLERS_COUNT_OFFSET = 0x1839c
         if (BATTLERS_COUNT_OFFSET + 6 > ewram.size) return -1
-
         val battlersCount = ewram[BATTLERS_COUNT_OFFSET].toInt() and 0xFF
         if (battlersCount != 2) return -1  // not in singles battle
-
         // gBattlerPartyIndexes[0] = player active slot (u16 at +2)
         val playerSlot = (ewram[BATTLERS_COUNT_OFFSET + 2].toInt() and 0xFF) or
                          ((ewram[BATTLERS_COUNT_OFFSET + 3].toInt() and 0xFF) shl 8)
@@ -550,5 +539,6 @@ class SaveStateReader(private val context: Context) {
         manualOverride = false
         lastModified = 0L
         cachedPartyOffset = -1
+        cachedEwram = null
     }
 }
