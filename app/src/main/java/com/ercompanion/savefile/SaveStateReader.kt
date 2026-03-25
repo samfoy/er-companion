@@ -35,6 +35,7 @@ class SaveStateReader(private val context: Context) {
 
     private var stateFile: File? = null
     private var lastModified: Long = 0L
+    private var cachedPartyOffset: Int = -1
     var lastStatus: String = "Not started"
 
     fun findStateFile(): File? {
@@ -106,19 +107,72 @@ class SaveStateReader(private val context: Context) {
             return null
         }
 
-        // Parse party count
-        val countOffset = PARTY_COUNT_FILE_OFFSET.toInt()
-        val count = stateBytes[countOffset].toInt() and 0xFF
-        if (count !in 1..6) {
-            lastStatus = "Invalid party count: $count at offset 0x${countOffset.toString(16)}"
-            return null
+        // Extract EWRAM (256KB starting at 0x21000)
+        val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
+
+        // Try cached offset first
+        if (cachedPartyOffset >= 0) {
+            val result = tryReadPartyAt(ewram, cachedPartyOffset)
+            if (result != null) {
+                lastStatus = "OK: ${file.name}, party=${result.first}, cached offset=0x${cachedPartyOffset.toString(16)}, ${(System.currentTimeMillis() - file.lastModified()) / 1000}s ago"
+                return result
+            }
+            cachedPartyOffset = -1 // cache invalid, rescan
         }
 
-        // Parse party data
-        val dataOffset = PARTY_DATA_FILE_OFFSET.toInt()
-        val partyBytes = stateBytes.copyOfRange(dataOffset, dataOffset + 624)
-        lastStatus = "OK: ${file.name}, party count=$count, ${(System.currentTimeMillis() - file.lastModified()) / 1000}s ago"
+        // Scan EWRAM for valid party data
+        lastStatus = "Scanning EWRAM for party data..."
+        val offset = scanForParty(ewram)
+        if (offset < 0) {
+            lastStatus = "Could not find valid party in EWRAM — is ER loaded and in-game?"
+            return null
+        }
+        cachedPartyOffset = offset
+        val result = tryReadPartyAt(ewram, offset)!!
+        lastStatus = "OK: ${file.name}, party=${result.first}, found at EWRAM+0x${offset.toString(16)}, ${(System.currentTimeMillis() - file.lastModified()) / 1000}s ago"
+        return result
+    }
+
+    private fun tryReadPartyAt(ewram: ByteArray, offset: Int): Pair<Int, ByteArray>? {
+        if (offset < 0 || offset + 4 + 624 > ewram.size) return null
+        val count = ewram[offset].toInt() and 0xFF
+        if (count !in 1..6) return null
+        val partyBytes = ewram.copyOfRange(offset + 4, offset + 4 + 624)
+        // Quick sanity: first mon should have non-zero personality
+        val personality = (partyBytes[0].toInt() and 0xFF) or
+                          ((partyBytes[1].toInt() and 0xFF) shl 8) or
+                          ((partyBytes[2].toInt() and 0xFF) shl 16) or
+                          ((partyBytes[3].toInt() and 0xFF) shl 24)
+        if (personality == 0) return null
         return Pair(count, partyBytes)
+    }
+
+    private fun scanForParty(ewram: ByteArray): Int {
+        // Scan EWRAM for a byte in range 1-6 (party count) followed by valid Pokemon struct
+        // Search in likely range: 0x20000 - 0x3C000 (where trainer data typically lives in Emerald variants)
+        // Align to 4 bytes
+        val searchStart = 0x20000
+        val searchEnd   = minOf(ewram.size - 628, 0x3C000)
+        var i = searchStart
+        while (i < searchEnd) {
+            val count = ewram[i].toInt() and 0xFF
+            if (count in 1..6) {
+                val result = tryReadPartyAt(ewram, i)
+                if (result != null) return i
+            }
+            i += 4
+        }
+        // Broader scan if not found
+        i = 0
+        while (i < ewram.size - 628) {
+            val count = ewram[i].toInt() and 0xFF
+            if (count in 1..6) {
+                val result = tryReadPartyAt(ewram, i)
+                if (result != null) return i
+            }
+            i += 4
+        }
+        return -1
     }
 
     private fun decompressIfNeeded(data: ByteArray): ByteArray? {
@@ -267,5 +321,6 @@ class SaveStateReader(private val context: Context) {
     fun clearCache() {
         stateFile = null
         lastModified = 0L
+        cachedPartyOffset = -1
     }
 }
