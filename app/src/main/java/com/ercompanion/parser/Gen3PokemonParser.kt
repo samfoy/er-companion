@@ -134,14 +134,18 @@ object Gen3PokemonParser {
         val orderIndex = (personality % 24u).toInt()
         val order = SUBSTRUCTURE_ORDER[orderIndex]
 
-        // Split into 4 substructures of 12 bytes each
-        val substructures = Array(4) { ByteArray(12) }
-        for (i in 0 until 4) {
-            System.arraycopy(decrypted, i * 12, substructures[i], 0, 12)
-        }
+        // Split into 4 raw substructures of 12 bytes each (by position in decrypted data)
+        val rawSubs = Array(4) { i -> decrypted.sliceArray(i * 12 until (i + 1) * 12) }
 
-        // Reorder according to personality
-        return Array(4) { substructures[order[it]] }
+        // order[i] = the substructure TYPE stored at raw position i
+        // We want result indexed by type: result[type] = rawSubs[positionOfType]
+        // i.e. result[order[i]] = rawSubs[i]
+        val result = Array(4) { ByteArray(12) }
+        for (i in 0 until 4) {
+            result[order[i]] = rawSubs[i]
+        }
+        // result[0] = Growth (species/item/exp), result[1] = Attacks, result[2] = EVs, result[3] = Misc
+        return result
     }
 
     private fun decodeGen3String(bytes: ByteArray): String {
