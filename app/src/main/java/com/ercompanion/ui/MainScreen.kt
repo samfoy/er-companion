@@ -118,9 +118,10 @@ fun MainScreen(
         // Debug panel
         DebugPanel(
             debugLog = debugLog,
-            currentHost = viewModel.debugHost,
-            currentPort = viewModel.debugPort,
-            onApply = { host, port -> viewModel.applyConnectionSettings(host, port) }
+            currentManualPath = viewModel.debugManualPath,
+            saveStateStatus = viewModel.getSaveStateStatus(),
+            searchPaths = viewModel.getSaveStateSearchPaths(),
+            onApply = { path -> viewModel.applySaveStatePath(path) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -446,7 +447,7 @@ fun MoveItem(mon: PartyMon, moveId: Int, enemyTarget: PartyMon?) {
     val attackStat = if (moveData.category == 0) mon.attack else mon.spAttack
     val defenseStat = if (moveData.category == 0) enemyTarget.defense else enemyTarget.spDefense
 
-    val result = com.ercompanion.data.DamageCalculator.calc(
+    val result = com.ercompanion.calc.DamageCalculator.calc(
         attackerLevel = mon.level,
         attackStat = attackStat,
         defenseStat = defenseStat,
@@ -455,8 +456,9 @@ fun MoveItem(mon: PartyMon, moveId: Int, enemyTarget: PartyMon?) {
         attackerTypes = attackerTypes,
         defenderTypes = defenderTypes,
         targetMaxHP = enemyTarget.maxHp,
-        targetCurrentHP = enemyTarget.hp,
-        moveCategory = moveData.category
+        isBurned = false,
+        weather = 0,
+        moveName = moveName
     )
 
     // Color based on effectiveness
@@ -527,13 +529,14 @@ fun StatItem(label: String, value: Int) {
 @Composable
 fun DebugPanel(
     debugLog: List<String>,
-    currentHost: String,
-    currentPort: Int,
-    onApply: (String, Int) -> Unit
+    currentManualPath: String,
+    saveStateStatus: String,
+    searchPaths: List<String>,
+    onApply: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var hostInput by remember { mutableStateOf(currentHost) }
-    var portInput by remember { mutableStateOf(currentPort.toString()) }
+    var pathInput by remember { mutableStateOf(currentManualPath) }
+    var showPaths by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -555,64 +558,89 @@ fun DebugPanel(
             if (expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Host/port editor
+                // Status line
+                Text("Status:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = saveStateStatus,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 10.sp,
+                    color = if (saveStateStatus.startsWith("Reading:")) Color(0xFF6BCB77) else Color(0xFFFF6B6B)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Manual path override
+                Text("Manual Path Override:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     androidx.compose.material3.OutlinedTextField(
-                        value = hostInput,
-                        onValueChange = { hostInput = it },
-                        label = { Text("Host", fontSize = 10.sp) },
-                        singleLine = true,
-                        modifier = Modifier.weight(2f),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color.White),
-                    )
-                    androidx.compose.material3.OutlinedTextField(
-                        value = portInput,
-                        onValueChange = { portInput = it },
-                        label = { Text("Port", fontSize = 10.sp) },
+                        value = pathInput,
+                        onValueChange = { pathInput = it },
+                        placeholder = { Text("/path/to/file.state0", fontSize = 10.sp) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = Color.White),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White),
                     )
                     Button(
-                        onClick = {
-                            val port = portInput.toIntOrNull() ?: 55355
-                            onApply(hostInput, port)
-                        },
+                        onClick = { onApply(pathInput) },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text("Apply", fontSize = 11.sp)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Log output
-                Text("Network Log:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
+                // Searched paths (collapsible)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showPaths = !showPaths },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Searched Paths:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
+                    Text(if (showPaths) "▲" else "▼", color = Color(0xFF888888), fontSize = 10.sp)
+                }
+
+                if (showPaths) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        searchPaths.forEach { path ->
+                            Text(
+                                text = "• $path",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 9.sp,
+                                color = Color(0xFF666666),
+                                modifier = Modifier.padding(vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Last updated timestamp
+                Text("Last Updated:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF888888))
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp)
                         .background(Color(0xFF0D0D0D), RoundedCornerShape(4.dp))
                         .padding(6.dp)
                 ) {
                     if (debugLog.isEmpty()) {
-                        Text("No traffic yet...", color = Color(0xFF444444), fontSize = 10.sp)
+                        Text("No updates yet...", color = Color(0xFF444444), fontSize = 10.sp)
                     } else {
                         androidx.compose.foundation.lazy.LazyColumn {
                             items(debugLog.size) { i ->
-                                val line = debugLog[debugLog.size - 1 - i] // newest first
-                                val color = when {
-                                    line.startsWith("✗") -> Color(0xFFFF6B6B)
-                                    line.startsWith("←") -> Color(0xFF6BCB77)
-                                    line.startsWith("→") -> Color(0xFF4ECDC4)
-                                    else -> Color(0xFF888888)
-                                }
+                                val line = debugLog[i]
+                                val color = if (line.startsWith("Reading:")) Color(0xFF6BCB77) else Color(0xFF888888)
                                 Text(line, color = color, fontSize = 9.sp, lineHeight = 12.sp)
                             }
                         }

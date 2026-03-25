@@ -1,175 +1,208 @@
-# ER Companion App — v0.2: Sprites, Damage Calcs, Recommended Builds
+# ER Companion App — v0.3: Save State Polling
 
 ## Context
 
-This is a continuation of v0.1 which is already built and compiles successfully. The APK exists at `app/build/outputs/apk/debug/app-debug.apk`. Do NOT rewrite the project from scratch — incrementally improve it.
+v0.2 is built and working UI-wise. The RetroArch UDP network commands approach has been abandoned — the setting resets on every launch on Android regardless of build version or config editing. We're switching to **mGBA save state file polling** instead.
 
-## Current State
+## How Save State Polling Works
 
-All source files exist and compile:
-- `network/RetroArchClient.kt` — UDP socket client for RetroArch network commands
-- `parser/Gen3PokemonParser.kt` — BoxPokémon decryption + party parsing
-- `parser/AddressScanner.kt` — runtime EWRAM address scanner
-- `data/PokemonData.kt` — species/move name maps
-- `ui/MainScreen.kt` — Jetpack Compose dark UI, party panel
-- `MainViewModel.kt` — StateFlow MVVM
-- `MainActivity.kt` — entry point
-- `gradle.properties` already has `android.useAndroidX=true` and `android.enableJetifier=true`
-- `local.properties` points to `sdk.dir=/opt/homebrew/share/android-commandlinetools`
+RetroArch writes save states to shared storage. The app watches the save state file for changes and parses EWRAM directly from it.
 
-## What to Build in v0.2
+**mGBA save state format (confirmed from mgba source):**
+- Total file size: `0x61000` bytes (396KB) — this is a fixed struct `GBASerializedState`
+- Magic header: `0x01000000` + version at offset 0x00
+- EWRAM (256KB) starts at file offset `0x21000`
+- IWRAM (32KB) starts at file offset `0x19000`
+- IO registers start at offset `0x400`
 
-### 1. Pokémon Sprites
+**Party data location:**
+- `gPlayerParty` is at GBA address `0x020244F0` (EWRAM)
+- EWRAM base = `0x02000000`
+- Party offset within EWRAM = `0x020244F0 - 0x02000000 = 0x244F0`
+- **Party offset in state file = `0x21000 + 0x244F0 = 0x454F0`**
+- Party data size = 6 × 104 bytes = 624 bytes
+- Party count byte is just before party: file offset `0x454EC` (4 bytes before, confirmed from ER source)
 
-**Source:** `https://raw.githubusercontent.com/DepressoMocha/emerogue/moka-dev/graphics/pokemon/<name>/icon.png`
+**Save state file path on Android:**
+- Default: `/storage/emulated/0/RetroArch/states/<rom_name>.state0`
+- OR `/sdcard/RetroArch/states/<rom_name>.state0`
+- The app needs READ_EXTERNAL_STORAGE permission (or use SAF on Android 10+)
+- Rom name for ER is likely `Emerald_Rogue` or similar
 
-- Pokemon names in the URL are lowercase, e.g. `bulbasaur`, `charizard`, `mr-mime`
-- Icon sprites are small (~32x32px), perfect for party panel
-- Bundle a script to download sprites at build time, OR fetch at runtime and cache in app's files dir
-- **Preferred: runtime fetch + disk cache** (keeps APK small, ER has 1000+ species)
-  - On first load: fetch from GitHub raw URL, save to `filesDir/sprites/<name>.png`
-  - Display with Coil (async image loading library)
-  - Show a Poké Ball placeholder while loading
+## What to Build
 
-**Add Coil dependency** to `app/build.gradle.kts`:
-```kotlin
-implementation("io.coil-kt:coil-compose:2.5.0")
-```
+### 1. Replace `RetroArchClient` with `SaveStateReader`
 
-**Species name → URL slug mapping** — most names just lowercase, but handle edge cases:
-- `nidoran-f` → `nidoran-f`
-- `nidoran-m` → `nidoran-m`
-- `mr-mime` → `mr-mime`
-- `mime-jr` → `mime-jr`
-- `farfetchd` → `farfetchd`
-- Use the species name from `PokemonData.kt` lowercased and hyphenated
-
-### 2. Damage Calculator (Gen5+ formula — confirmed from ER source)
-
-The formula from `src/battle_util.c` in the DepressoMocha emerogue repo:
-
-```c
-// CalculateBaseDamage:
-dmg = power * userFinalAttack * (2 * level / 5 + 2) / targetFinalDefense / 50 + 2
-
-// Then modifiers applied in order:
-// 1. Target modifier (0.75x if multi-target move)
-// 2. Weather (1.5x for sun/rain boosted moves, 0.5x for weakened)
-// 3. Critical hit (1.5x)
-// 4. Random factor (85–100%)
-// 5. STAB (1.5x, or 2.0x with Adaptability)
-// 6. Type effectiveness (0x, 0.25x, 0.5x, 1x, 2x, 4x)
-// 7. Burn (0.5x if attacker is burned and using physical move, unless Guts)
-```
-
-**Implement `DamageCalculator.kt`:**
+Create `app/src/main/java/com/ercompanion/savefile/SaveStateReader.kt`:
 
 ```kotlin
-data class DamageResult(
-    val moveName: String,
-    val minDamage: Int,       // at 85% roll
-    val maxDamage: Int,       // at 100% roll
-    val effectiveness: Float, // 0.0, 0.25, 0.5, 1.0, 2.0, 4.0
-    val effectLabel: String,  // "", "Not very effective", "Super effective!", "No effect"
-    val percentMin: Int,      // min as % of target maxHP
-    val percentMax: Int,      // max as % of target maxHP
-    val isStab: Boolean,
-    val wouldKO: Boolean,     // percentMax >= 100
-)
+import android.content.Context
+import java.io.File
+import java.io.RandomAccessFile
 
-object DamageCalculator {
-    fun calc(
-        attackerLevel: Int,
-        attackStat: Int,    // atk or spAtk depending on move category
-        defenseStat: Int,   // def or spDef depending on move category
-        movePower: Int,
-        moveType: Int,      // type ID
-        attackerTypes: List<Int>,
-        defenderTypes: List<Int>,
-        targetMaxHP: Int,
-        targetCurrentHP: Int,
-        isBurned: Boolean = false,
-        weather: Int = 0,   // 0 = none
-    ): DamageResult
+class SaveStateReader(private val context: Context) {
+    
+    companion object {
+        const val MGBA_STATE_SIZE = 0x61000L
+        const val EWRAM_OFFSET = 0x21000L
+        const val PARTY_COUNT_ADDR = 0x020244ECL  // GBA address
+        const val PARTY_DATA_ADDR  = 0x020244F0L  // GBA address
+        val PARTY_COUNT_FILE_OFFSET = EWRAM_OFFSET + (PARTY_COUNT_ADDR - 0x02000000L)
+        val PARTY_DATA_FILE_OFFSET  = EWRAM_OFFSET + (PARTY_DATA_ADDR - 0x02000000L)
+        
+        val SEARCH_PATHS = listOf(
+            "/storage/emulated/0/RetroArch/states",
+            "/sdcard/RetroArch/states",
+            "/storage/emulated/0/Android/data/com.retroarch.aarch64/files/states",
+            "/storage/emulated/0/Android/data/com.retroarch/files/states"
+        )
+    }
+    
+    private var stateFile: File? = null
+    private var lastModified: Long = 0L
+    
+    // Find the most recently modified .state0 file
+    fun findStateFile(): File? {
+        for (path in SEARCH_PATHS) {
+            val dir = File(path)
+            if (!dir.exists()) continue
+            val stateFiles = dir.listFiles { f -> 
+                f.name.endsWith(".state0") || f.name.endsWith(".state")
+            } ?: continue
+            if (stateFiles.isNotEmpty()) {
+                return stateFiles.maxByOrNull { it.lastModified() }
+            }
+        }
+        return null
+    }
+    
+    // Returns true if file has changed since last read
+    fun hasNewData(): Boolean {
+        val file = stateFile ?: findStateFile()?.also { stateFile = it } ?: return false
+        val modified = file.lastModified()
+        if (modified > lastModified) {
+            lastModified = modified
+            return true
+        }
+        return false
+    }
+    
+    // Read raw party bytes from state file
+    fun readPartyData(): Pair<Int, ByteArray>? {
+        val file = stateFile ?: findStateFile()?.also { stateFile = it } ?: return null
+        if (!file.exists() || file.length() < MGBA_STATE_SIZE) return null
+        
+        return try {
+            RandomAccessFile(file, "r").use { raf ->
+                // Read party count (1 byte)
+                raf.seek(PARTY_COUNT_FILE_OFFSET)
+                val count = raf.read() and 0xFF
+                if (count !in 1..6) return null
+                
+                // Read party data (6 * 104 bytes)
+                raf.seek(PARTY_DATA_FILE_OFFSET)
+                val buf = ByteArray(624)
+                raf.readFully(buf)
+                Pair(count, buf)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    // Get human-readable status for debug panel
+    fun getStatus(): String {
+        val file = stateFile ?: findStateFile()?.also { stateFile = it }
+        return when {
+            file == null -> "No state file found — check paths below"
+            !file.exists() -> "File missing: ${file.absolutePath}"
+            file.length() < MGBA_STATE_SIZE -> "File too small (${file.length()} bytes, expected ${MGBA_STATE_SIZE})"
+            else -> "Reading: ${file.name} (${file.length()/1024}KB, modified ${(System.currentTimeMillis() - file.lastModified())/1000}s ago)"
+        }
+    }
+    
+    fun getSearchedPaths(): List<String> = SEARCH_PATHS
+    
+    fun setManualPath(path: String) {
+        stateFile = File(path)
+        lastModified = 0L
+    }
+    
+    fun clearCache() {
+        stateFile = null
+        lastModified = 0L
+    }
 }
 ```
 
-**Type effectiveness table** — use the modern (Gen6+) chart ER uses:
-- All 18 types × 18 types
-- Include Fairy type
-- Hardcode as a 2D array of floats
+### 2. Update AndroidManifest.xml
 
-**Move data** — expand `PokemonData.kt` to include for each move:
-- `power: Int` (0 for status moves)
-- `type: Int` (type ID)
-- `category: Int` (0=physical, 1=special, 2=status)
+Add storage permissions:
+```xml
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+```
 
-At minimum include the top 150 most common moves in Gen3-9 that appear in ER. Structure:
+Also add `android:requestLegacyExternalStorage="true"` to `<application>` tag for Android 10 compatibility.
+
+### 3. Update MainViewModel.kt
+
+Replace the `RetroArchClient` poll loop with a save state watcher:
+
 ```kotlin
-data class MoveData(val name: String, val power: Int, val type: Int, val category: Int)
-val MOVE_DATA: Map<Int, MoveData>  // move ID → MoveData
+// Replace client with:
+private val saveStateReader = SaveStateReader(application)
+
+// New connection states:
+// DISCONNECTED = no state file found
+// CONNECTED = state file found and readable  
+// ERROR = file found but can't parse
+
+// Poll loop: check every 1000ms if file has changed
+// If changed: read party data, parse, update state
+// If not changed: keep last known party data (don't clear it)
 ```
 
-### 3. UI: Damage Display
+Key behavior change: **don't clear party data when state file hasn't changed** — the party persists between polls. Only clear if the file disappears entirely.
 
-In `MainScreen.kt`, when a party slot is expanded:
-- Show the 4 moves with damage calc results vs current enemy lead
-- Format: `Earthquake — 84–99 dmg (42–50%) ⚡ Super effective!`
-- Color code: red for SE, gray for NVE, white for neutral, dark for immune
-- If no enemy party is scanned yet, show `— vs ?` placeholder
-- Show type effectiveness label inline
+### 4. Update Debug Panel in MainScreen.kt
 
-### 4. Recommended Builds
+Replace the host/port fields with:
+- **Status line**: shows `SaveStateReader.getStatus()`
+- **File path display**: shows which file is being read
+- **Manual path override**: text field + Apply button to set a custom path
+- **Searched paths list**: show all paths that were checked (collapsed by default)
+- **Last updated**: timestamp of last successful read
 
-**Source:** The ER Discord data indexed at `~/.openclaw/workspace/` via the er-discord-search skill.
+### 5. Request Storage Permission at Runtime
 
-Run this query at build time to generate a static JSON file bundled in the APK assets:
+In `MainActivity.kt`, add runtime permission request for `READ_EXTERNAL_STORAGE` on app start. For Android 11+, also check `Environment.isExternalStorageManager()` and show a prompt to grant "All files access" if needed (required to read `/sdcard/RetroArch/states/`).
 
-```bash
-python3 ~/.openclaw/workspace/scripts/er_search.py "recommended build" --top-k 50
-python3 ~/.openclaw/workspace/scripts/er_search.py "best moveset" --top-k 50
-python3 ~/.openclaw/workspace/scripts/er_search.py "tier list" --top-k 30
-```
-
-Parse the results and create `app/src/main/assets/builds.json` — a map of species name → recommended build:
-```json
-{
-  "garchomp": {
-    "tier": "S",
-    "notes": "Best physical sweeper, run Earthquake + Dragon Claw + Swords Dance",
-    "recommendedMoves": ["Earthquake", "Dragon Claw", "Swords Dance", "Stone Edge"],
-    "recommendedItem": "Life Orb"
-  }
+```kotlin
+// In MainActivity.onCreate, before setting content:
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) 
+            != PackageManager.PERMISSION_GRANTED) {
+        requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 1001)
+    }
+}
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+    if (!Environment.isExternalStorageManager()) {
+        startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+    }
 }
 ```
 
-If Discord data is sparse for a species, omit it from the JSON (don't hallucinate).
+### 6. RetroArch Setup Instructions in App
 
-**In the UI**, when a party slot is expanded:
-- Show tier badge (S/A/B/C) if available
-- Show recommended moves as a "suggested" row below actual moves
-- Show recommended item if known
+Add a one-time setup screen or info dialog that tells the user:
+1. In RetroArch: **Settings > Saving > Auto Save State** → ON, interval = **5 seconds** (or lowest available)
+2. The state file will be at `/sdcard/RetroArch/states/<rom>.state0`
+3. Tap "Rescan" after enabling auto-save
 
-### 5. Enemy Party Scanning
+### 7. Keep UDP as Fallback
 
-Extend `AddressScanner.kt` to also locate `gEnemyParty`:
-- It follows `gPlayerParty` in memory at a known offset
-- Try: scan for a second valid party structure starting at `gPlayerParty + 624` (6 × 104 bytes)
-- Store in `MainViewModel` as `enemyPartyState: StateFlow<List<PartyMon>>`
-
-In the UI, show a compact enemy party row at the top (small icons + level only), and use enemy lead's stats/types for damage calculations.
-
-## Move Data Reference
-
-For the full move list, fetch and parse from:
-`https://raw.githubusercontent.com/DepressoMocha/emerogue/master/src/data/moves_info.h`
-
-This file has all move definitions. Parse `power`, `type`, `split` (physical/special/status) fields.
-
-## Pokémon Species Data Reference
-
-For base stats (needed for damage calc when party struct not yet decoded for enemy):
-`https://raw.githubusercontent.com/DepressoMocha/emerogue/master/src/data/pokemon/base_stats/`
+Keep `RetroArchClient.kt` in the project but mark it as secondary. `MainViewModel` should try UDP first (quick check), fall back to save state if UDP times out. This way if UDP ever gets fixed, it just works.
 
 ## Build Verification
 
@@ -182,6 +215,6 @@ Fix any compilation errors before signaling completion.
 
 ## Completion Signal
 
-When the build succeeds (APK produced at `app/build/outputs/apk/debug/app-debug.apk`), output the following text on its own line:
+When the build succeeds, output on its own line:
 
 LOOP_COMPLETE

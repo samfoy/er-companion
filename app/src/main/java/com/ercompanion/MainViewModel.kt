@@ -9,6 +9,7 @@ import com.ercompanion.network.RetroArchClient
 import com.ercompanion.parser.AddressScanner
 import com.ercompanion.parser.Gen3PokemonParser
 import com.ercompanion.parser.PartyMon
+import com.ercompanion.savefile.SaveStateReader
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val client = RetroArchClient()
+    private val saveStateReader = SaveStateReader(application)
+    private val client = RetroArchClient()  // Keep as fallback
     private val scanner = AddressScanner(application, client)
     private val buildsRepository = BuildsRepository(application)
 
@@ -40,15 +42,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _debugLog = MutableStateFlow<List<String>>(emptyList())
     val debugLog: StateFlow<List<String>> = _debugLog.asStateFlow()
 
-    var debugHost: String = "127.0.0.1"
-    var debugPort: Int = 55355
+    var debugManualPath: String = ""
 
     private val _buildsLoaded = MutableStateFlow(false)
     val buildsLoaded: StateFlow<Boolean> = _buildsLoaded.asStateFlow()
 
     private var pollingJob: Job? = null
-    private var partyCountAddress: Long? = null
-    private var partyDataAddress: Long? = null
     private var enemyPartyCountAddress: Long? = null
     private var enemyPartyDataAddress: Long? = null
 
@@ -77,85 +76,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         pollingJob = viewModelScope.launch {
             while (true) {
                 try {
-                    // Check connection status
-                    val status = client.getStatus()
-                    _connectionState.value = status
+                    // Check if save state file has new data
+                    if (saveStateReader.hasNewData()) {
+                        _connectionState.value = RetroArchClient.ConnectionStatus.CONNECTED
 
-                    if (status == RetroArchClient.ConnectionStatus.CONNECTED) {
-                        // Find party address if not found yet
-                        if (partyCountAddress == null || partyDataAddress == null) {
-                            if (!_scanningState.value) {
-                                _scanningState.value = true
-                                _errorMessage.value = "Scanning for party data..."
+                        // Read party data from save state
+                        val partyData = saveStateReader.readPartyData()
+                        if (partyData != null) {
+                            val (partyCount, partyBytes) = partyData
+                            val party = Gen3PokemonParser.parseParty(partyBytes, partyCount)
+                            _partyState.value = party
+                            _errorMessage.value = null
 
-                                val addresses = scanner.findPartyAddress()
-                                if (addresses != null) {
-                                    partyCountAddress = addresses.first
-                                    partyDataAddress = addresses.second
-                                    _errorMessage.value = null
-                                } else {
-                                    _errorMessage.value = "Could not locate party data in memory"
-                                }
-
-                                _scanningState.value = false
-                            }
-                        } else {
-                            // Read party data
-                            readPartyData()
-
-                            // Try to find enemy party if not found yet
+                            // Try to read enemy party data if we have addresses
                             if (enemyPartyCountAddress == null || enemyPartyDataAddress == null) {
+                                // Try to find enemy party using UDP client as fallback
                                 val enemyAddresses = scanner.findEnemyPartyAddress()
                                 if (enemyAddresses != null) {
                                     enemyPartyCountAddress = enemyAddresses.first
                                     enemyPartyDataAddress = enemyAddresses.second
                                 }
                             } else {
-                                // Read enemy party data
+                                // Read enemy party data via UDP
                                 readEnemyPartyData()
                             }
+                        } else {
+                            _connectionState.value = RetroArchClient.ConnectionStatus.ERROR
+                            _errorMessage.value = "Failed to parse save state"
                         }
                     } else {
-                        _partyState.value = emptyList()
-                        if (status == RetroArchClient.ConnectionStatus.DISCONNECTED) {
-                            _errorMessage.value = "RetroArch not connected"
+                        // No new data, check if file exists
+                        val status = saveStateReader.getStatus()
+                        if (status.startsWith("No state file")) {
+                            _connectionState.value = RetroArchClient.ConnectionStatus.DISCONNECTED
+                            _errorMessage.value = "No save state file found — see debug panel for details"
                         } else {
-                            _errorMessage.value = "Connection error"
+                            // File exists but no new data, keep current state
+                            _connectionState.value = RetroArchClient.ConnectionStatus.CONNECTED
                         }
                     }
                 } catch (e: Exception) {
+                    _connectionState.value = RetroArchClient.ConnectionStatus.ERROR
                     _errorMessage.value = "Error: ${e.message}"
                     e.printStackTrace()
                 }
 
                 refreshDebugLog()
-                delay(500) // Poll every 500ms
+                delay(1000) // Poll every 1000ms
             }
         }
-    }
-
-    private suspend fun readPartyData() {
-        val countAddr = partyCountAddress ?: return
-        val dataAddr = partyDataAddress ?: return
-
-        // Read party count
-        val countData = client.readMemory(countAddr, 1) ?: return
-        val partyCount = countData[0].toInt() and 0xFF
-
-        if (partyCount !in 1..6) {
-            // Invalid count, rescan
-            partyCountAddress = null
-            partyDataAddress = null
-            return
-        }
-
-        // Read all party Pokemon (6 slots, 104 bytes each)
-        val partyData = client.readMemory(dataAddr, 104 * 6) ?: return
-
-        // Parse party
-        val party = Gen3PokemonParser.parseParty(partyData, partyCount)
-        _partyState.value = party
-        _errorMessage.value = null
     }
 
     private suspend fun readEnemyPartyData() {
@@ -193,24 +162,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun rescan() {
-        partyCountAddress = null
-        partyDataAddress = null
         enemyPartyCountAddress = null
         enemyPartyDataAddress = null
+        saveStateReader.clearCache()
         scanner.clearCache()
         _errorMessage.value = "Rescanning..."
     }
 
-    fun applyConnectionSettings(host: String, port: Int) {
-        client.host = host
-        client.port = port
-        debugHost = host
-        debugPort = port
+    fun applySaveStatePath(path: String) {
+        debugManualPath = path
+        saveStateReader.setManualPath(path)
         rescan()
     }
 
+    fun getSaveStateStatus(): String {
+        return saveStateReader.getStatus()
+    }
+
+    fun getSaveStateSearchPaths(): List<String> {
+        return saveStateReader.getSearchedPaths()
+    }
+
     fun refreshDebugLog() {
-        _debugLog.value = client.getDebugLog()
+        val statusLines = mutableListOf<String>()
+        statusLines.add(saveStateReader.getStatus())
+        _debugLog.value = statusLines
     }
 
     override fun onCleared() {
