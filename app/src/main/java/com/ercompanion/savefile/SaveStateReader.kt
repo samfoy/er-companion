@@ -159,7 +159,7 @@ class SaveStateReader(private val context: Context) {
     }
 
     // Read enemy party from save state — gEnemyPartyCount is 1 byte after gPlayerPartyCount,
-    // gEnemyParty starts at gPlayerParty + 624 bytes
+    // gEnemyParty starts at gPlayerParty + 12*104 bytes (max party size buffer)
     fun readEnemyPartyData(playerCountOffset: Int): Pair<Int, ByteArray>? {
         val rawBytes = stateFile?.readBytes() ?: return null
         val stateBytes = decompressIfNeeded(rawBytes) ?: return null
@@ -167,14 +167,14 @@ class SaveStateReader(private val context: Context) {
         val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
 
         val enemyCountOffset = playerCountOffset + 1
-        val enemyPartyOffset = playerCountOffset + 4 + 624  // after count(4 aligned) + player party
+        val enemyPartyOffset = playerCountOffset + 4 + 12 * 104
 
-        if (enemyCountOffset >= ewram.size || enemyPartyOffset + 624 > ewram.size) return null
+        if (enemyCountOffset >= ewram.size || enemyPartyOffset + 12 * 104 > ewram.size) return null
 
         val count = ewram[enemyCountOffset].toInt() and 0xFF
-        if (count !in 1..6) return null
+        if (count !in 1..12) return null
 
-        val partyBytes = ewram.copyOfRange(enemyPartyOffset, enemyPartyOffset + 624)
+        val partyBytes = ewram.copyOfRange(enemyPartyOffset, enemyPartyOffset + 12 * 104)
         var validCount = 0
         for (i in 0 until count) {
             if (isValidMon(partyBytes, i * 104)) validCount++
@@ -263,21 +263,21 @@ class SaveStateReader(private val context: Context) {
     private fun tryReadPartyAt(ewram: ByteArray, countOffset: Int): Pair<Int, ByteArray>? {
         // countOffset = position of gPlayerPartyCount byte
         // gPlayerParty starts at countOffset+4 (confirmed from ER state analysis)
-        if (countOffset < 0 || countOffset + 4 + 624 > ewram.size) return null
-        val count = ewram[countOffset].toInt() and 0xFF
-        if (count !in 1..6) return null
+        if (countOffset < 0 || countOffset + 4 + 12 * 104 > ewram.size) return null
+        val rawCount = ewram[countOffset].toInt() and 0xFF
+        if (rawCount !in 1..12) return null
 
         val partyStart = countOffset + 4
-        val partyBytes = ewram.copyOfRange(partyStart, partyStart + 624)
+        val partyBytes = ewram.copyOfRange(partyStart, partyStart + 12 * 104)
 
+        // Count valid mons (ER may report count=7 but only 6 real mons — clamp to valid)
         var validCount = 0
-        for (i in 0 until count) {
-            if (!isValidMon(partyBytes, i * 104)) return null
-            validCount++
+        for (i in 0 until minOf(rawCount, 12)) {
+            if (isValidMon(partyBytes, i * 104)) validCount++
+            else break
         }
-        // Require at least 2 valid mons to avoid false positives
-        if (validCount < minOf(count, 2)) return null
-        return Pair(count, partyBytes)
+        if (validCount < 1) return null
+        return Pair(validCount, partyBytes)
     }
 
     private fun scanForParty(ewram: ByteArray): Int {
