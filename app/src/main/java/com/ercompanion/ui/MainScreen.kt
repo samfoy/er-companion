@@ -84,6 +84,13 @@ fun MainScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
+                Spacer(modifier = Modifier.width(12.dp))
+                TextButton(
+                    onClick = onRescan,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("↺ Rescan", fontSize = 12.sp, color = Color(0xFF888888))
+                }
             }
         }
 

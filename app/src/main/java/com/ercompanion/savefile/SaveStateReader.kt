@@ -34,6 +34,7 @@ class SaveStateReader(private val context: Context) {
     }
 
     private var stateFile: File? = null
+    private var manualOverride: Boolean = false
     private var lastModified: Long = 0L
     private var cachedPartyOffset: Int = -1
     var lastStatus: String = "Not started"
@@ -84,7 +85,12 @@ class SaveStateReader(private val context: Context) {
     }
 
     fun readPartyData(): Pair<Int, ByteArray>? {
-        val file = stateFile ?: findStateFile()?.also { stateFile = it } ?: run {
+        // Always re-scan for newest file unless manually overridden
+        val file = if (stateFile != null && manualOverride) {
+            stateFile!!
+        } else {
+            findStateFile()?.also { stateFile = it }
+        } ?: run {
             lastStatus = "No state file found in searched paths"
             return null
         }
@@ -315,11 +321,14 @@ class SaveStateReader(private val context: Context) {
 
     fun setManualPath(path: String) {
         stateFile = File(path)
+        manualOverride = true
         lastModified = 0L
+        cachedPartyOffset = -1
     }
 
     fun clearCache() {
         stateFile = null
+        manualOverride = false
         lastModified = 0L
         cachedPartyOffset = -1
     }
