@@ -87,25 +87,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         // Read party data from save state
                         val partyData = saveStateReader.readPartyData()
                         if (partyData != null) {
-                            val (partyCount, partyBytes) = partyData
+                            val (_, partyBytes) = partyData
 
-                            // Parse all 12 slots to get OT ID from slot 0 (always player's mon)
+                            // Parse all 12 slots; find player's OT ID from first valid mon
                             val allSlots = Gen3PokemonParser.parseAllSlots(partyBytes)
-                            val playerOtId = allSlots.firstOrNull { it != null }?.otId ?: -1L
+                            val playerOtId = allSlots.firstOrNull { it != null && it.level > 0 }?.otId ?: -1L
 
-                            // Filter player party: only mons matching player's OT ID
-                            val party = Gen3PokemonParser.parseParty(partyBytes, minOf(partyCount, 12), filterOtId = playerOtId)
-                                .filterNotNull()
+                            // Player party: slots matching player OT ID
+                            val party = allSlots.filterNotNull()
+                                .filter { playerOtId < 0 || it.otId == playerOtId }
                             _partyState.value = party
                             _errorMessage.value = null
 
                             // Enemy party: only show if actively in battle (gBattlersCount == 2)
-                            // Enemy party memory is stale after battles end — never trust OT ID alone
-                            val rawBuf = saveStateReader.readRawPartyBuffer()
                             val inBattle = saveStateReader.readInBattle()
-                            if (rawBuf != null && inBattle) {
-                                val enemySlots = Gen3PokemonParser.parseAllSlots(rawBuf)
-                                    .filterNotNull()
+                            if (inBattle) {
+                                val enemySlots = allSlots.filterNotNull()
                                     .filter { playerOtId < 0 || it.otId != playerOtId }
                                 _enemyPartyState.value = enemySlots
 

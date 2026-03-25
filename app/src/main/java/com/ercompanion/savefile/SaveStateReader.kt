@@ -115,8 +115,7 @@ class SaveStateReader(private val context: Context) {
         }
 
         val rawBytes = file.readBytes()
-        val fileAge = (System.currentTimeMillis() - file.lastModified()) / 1000
-        lastStatus = "Found: ${file.name} (${rawBytes.size/1024}KB, ${fileAge}s old)"
+        lastStatus = "Found: ${file.name} (${rawBytes.size/1024}KB)"
 
         // Decompress if needed
         val stateBytes = decompressIfNeeded(rawBytes) ?: run {
@@ -133,38 +132,42 @@ class SaveStateReader(private val context: Context) {
         val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
         cachedEwram = ewram
 
-        // Try cached offset first
-        if (cachedPartyOffset >= 0) {
-            val result = tryReadPartyAt(ewram, cachedPartyOffset)
-            if (result != null) {
-                lastStatus = "OK: ${file.name}, party=${result.first}, cached offset=0x${cachedPartyOffset.toString(16)}, ${(System.currentTimeMillis() - file.lastModified()) / 1000}s ago"
-                return result
-            }
-            cachedPartyOffset = -1 // cache invalid, rescan
-        }
-
-        // Scan EWRAM for valid party data
-        lastStatus = "Scanning EWRAM for party data..."
-        val offset = scanForParty(ewram)
-        if (offset < 0) {
-            // Diagnostic: show what's at the hint address
-            val hint = 0x3777c
-            val hintCount = if (hint < ewram.size) ewram[hint].toInt() and 0xFF else -1
-            val hintPers = if (hint + 8 < ewram.size) readU32LE(ewram, hint + 4) else -1L
-            val hintLvl = if (hint + 4 + 84 < ewram.size) ewram[hint + 4 + 84].toInt() and 0xFF else -1
-            lastStatus = "No party found. Hint@0x3777c: count=$hintCount pers=0x${hintPers.toString(16)} lvl=$hintLvl. State may be from different ER build/save."
+        // gPlayerPartyCount at 0x3777c is UNRELIABLE in ER mocha (can be 16+, used for run state).
+        // Instead: read all 12 slots at the known fixed address, return the full 12-slot buffer.
+        // The ViewModel splits player/enemy by OT ID.
+        val partyStart = 0x3777c + 4
+        if (partyStart + 12 * 104 > ewram.size) {
+            lastStatus = "EWRAM too small for party buffer"
             return null
         }
-        cachedPartyOffset = offset
-        val result = tryReadPartyAt(ewram, offset)!!
-        lastStatus = "OK: ${file.name}, party=${result.first}, found at EWRAM+0x${offset.toString(16)}, ${(System.currentTimeMillis() - file.lastModified()) / 1000}s ago"
-        return result
+        val partyBytes = ewram.copyOfRange(partyStart, partyStart + 12 * 104)
+        cachedPartyOffset = 0x3777c
+
+        // Count valid player slots (non-empty personality, valid level/HP)
+        // Use OT ID from first non-empty slot as the player's ID
+        var playerOtId = -1L
+        var validCount = 0
+        for (i in 0 until 12) {
+            val monOff = i * 104
+            val personality = readU32LE(partyBytes, monOff)
+            if (personality == 0L) continue
+            val otId = readU32LE(partyBytes, monOff + 4)
+            if (playerOtId < 0) playerOtId = otId
+            if (otId == playerOtId && isValidMon(partyBytes, monOff)) validCount++
+        }
+        if (validCount == 0) {
+            lastStatus = "No valid player mons at 0x3777c. State may be outdated."
+            return null
+        }
+
+        val fileAge = (System.currentTimeMillis() - file.lastModified()) / 1000
+        lastStatus = "OK: ${file.name}, playerMons=$validCount otId=0x${playerOtId.toString(16)}, ${fileAge}s ago"
+        return Pair(12, partyBytes)  // always return all 12 slots; ViewModel does OT filtering
     }
 
     fun readRawPartyBuffer(): ByteArray? {
         val ewram = cachedEwram ?: return null
-        val offset = if (cachedPartyOffset >= 0) cachedPartyOffset else return null
-        val partyStart = offset + 4
+        val partyStart = 0x3777c + 4
         if (partyStart + 12 * 104 > ewram.size) return null
         return ewram.copyOfRange(partyStart, partyStart + 12 * 104)
     }

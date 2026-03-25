@@ -41,16 +41,17 @@ These differ from vanilla Emerald — ER uses extra EWRAM for its run data:
 
 | Symbol | EWRAM offset | Notes |
 |---|---|---|
-| `gPlayerPartyCount` | `0x3777c` | u8, but ER can store 7 (last slot is padding) |
-| `gPlayerParty` | `0x37780` | `gPlayerPartyCount + 4` |
-| `gEnemyPartyCount` | `0x3777d` | 1 byte after player count |
-| `gEnemyParty` | `gPlayerParty + 12*104` | Immediately after max player party buffer |
+| `gPlayerPartyCount` | `0x3777c` | **DO NOT USE** — ER stores run state here, value can be 16+ |
+| `gPlayerParty` | `0x37780` | `0x3777c + 4` — always read all 12 slots |
 | `gBattlersCount` | `0x1839c` | u8, =2 during singles battle |
 | `gBattlerPartyIndexes[0]` | `0x1839e` | u16, active player slot (0–5) |
 | `gBattlerPartyIndexes[1]` | `0x183a0` | u16, active enemy slot |
 
-**Note:** `gPlayerPartyCount` can be 7 in ER — ER reserves an extra slot. Clamp to valid mons
-by checking `isValidMon()` (personality != 0, level 1–100, maxHP 1–9999, currentHP <= maxHP).
+**`gPlayerPartyCount` is corrupted/repurposed in ER mocha** — confirmed value of 16 from real save state.
+Always read all 12 slots at `0x37780` and split by OT ID. Never trust the count byte.
+
+The 12-slot buffer contains both player mons and trainer team interleaved with empty slots (personality=0).
+Player mons and trainer mons are distinguished by OT ID only.
 
 ---
 
