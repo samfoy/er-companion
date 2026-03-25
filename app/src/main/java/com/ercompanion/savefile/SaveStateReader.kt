@@ -176,6 +176,54 @@ class SaveStateReader(private val context: Context) {
      * Returns true only if gBattlersCount == 2 (singles battle in progress).
      * Uses cached EWRAM from the current poll cycle — must be called after readPartyData().
      */
+    /**
+     * Read gBattleMons[0..3] from EWRAM — these have MODIFIED stats (post stat stages).
+     * Returns list of up to 4 entries: [player_active, enemy_active, player_ally?, enemy_ally?]
+     * Uses confirmed layout from moka-dev binary analysis:
+     *   base=EWRAM+0x1c358, struct_size=0x60
+     *   +0x00 species, +0x02 atk, +0x04 def, +0x06 spd, +0x08 spa, +0x0a spdef
+     *   +0x0c moves[4], +0x18 statStages[8] (s8, baseline=6 not 0)
+     *   +0x2a hp, +0x2c level, +0x2e maxHP
+     */
+    data class BattleMon(
+        val species: Int,
+        val attack: Int, val defense: Int, val speed: Int,
+        val spAttack: Int, val spDefense: Int,
+        val moves: List<Int>,
+        val statStages: List<Int>,  // raw values, baseline=6; actual modifier = stages[i]-6
+        val hp: Int, val maxHp: Int, val level: Int
+    )
+
+    fun readBattleMons(): List<BattleMon?> {
+        val ewram = cachedEwram ?: return emptyList()
+        val GBATTLE_MONS_OFFSET = 0x1c358
+        val STRUCT_SIZE = 0x60
+        val result = mutableListOf<BattleMon?>()
+        for (i in 0 until 4) {
+            val base = GBATTLE_MONS_OFFSET + i * STRUCT_SIZE
+            if (base + STRUCT_SIZE > ewram.size) { result.add(null); continue }
+            val species = readU16LE(ewram, base).toInt()
+            if (species == 0 || species > 2000) { result.add(null); continue }
+            val atk   = readU16LE(ewram, base + 0x02).toInt()
+            val def_  = readU16LE(ewram, base + 0x04).toInt()
+            val spd   = readU16LE(ewram, base + 0x06).toInt()
+            val spa   = readU16LE(ewram, base + 0x08).toInt()
+            val spdef = readU16LE(ewram, base + 0x0a).toInt()
+            val moves = (0 until 4).map { readU16LE(ewram, base + 0x0c + it * 2).toInt() }
+            val stages = (0 until 8).map { ewram[base + 0x18 + it].toInt() }
+            val hp    = readU16LE(ewram, base + 0x2a).toInt()
+            val lv    = ewram[base + 0x2c].toInt() and 0xFF
+            val maxHp = readU16LE(ewram, base + 0x2e).toInt()
+            if (lv == 0 || maxHp == 0) { result.add(null); continue }
+            result.add(BattleMon(species, atk, def_, spd, spa, spdef, moves, stages, hp, maxHp, lv))
+        }
+        return result
+    }
+
+    private fun readU16LE(buf: ByteArray, offset: Int): Long {
+        return ((buf[offset].toInt() and 0xFF) or ((buf[offset+1].toInt() and 0xFF) shl 8)).toLong()
+    }
+
     fun readInBattle(): Boolean {
         val ewram = cachedEwram ?: return false
         val BATTLERS_COUNT_OFFSET = 0x1839c

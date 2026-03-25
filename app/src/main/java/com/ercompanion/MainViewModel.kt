@@ -100,19 +100,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             _errorMessage.value = null
 
                             // Enemy party: only show if actively in battle
-                            // gBattlersCount == 2 is necessary but not sufficient — ER doesn't
-                            // always reset it after battle. Secondary check: at least one enemy
-                            // mon must have HP > 0 (all fainted = battle is over).
                             val inBattle = saveStateReader.readInBattle()
                             val enemySlots = allSlots.filterNotNull()
                                 .filter { playerOtId < 0 || it.otId != playerOtId }
                             val activeEnemy = enemySlots.any { it.hp > 0 }
                             if (inBattle && activeEnemy) {
-                                _enemyPartyState.value = enemySlots
+                                // Read gBattleMons for live modified stats
+                                val battleMons = saveStateReader.readBattleMons()
+                                val playerBattleMon = battleMons.getOrNull(0)
+                                val enemyBattleMon  = battleMons.getOrNull(1)
 
+                                // Overlay battle stats onto party/enemy lists for damage calcs
                                 val activeSlot = saveStateReader.readActivePlayerSlot()
                                 _activePlayerSlot.value = if (activeSlot >= 0) activeSlot
                                     else inferActiveSlot(party)
+
+                                // Patch active player mon with live stats
+                                val patchedParty = party.mapIndexed { idx, mon ->
+                                    if (idx == _activePlayerSlot.value && playerBattleMon != null
+                                        && playerBattleMon.species == mon.species) {
+                                        mon.copy(
+                                            attack = playerBattleMon.attack,
+                                            defense = playerBattleMon.defense,
+                                            speed = playerBattleMon.speed,
+                                            spAttack = playerBattleMon.spAttack,
+                                            spDefense = playerBattleMon.spDefense,
+                                            hp = playerBattleMon.hp,
+                                            maxHp = playerBattleMon.maxHp
+                                        )
+                                    } else mon
+                                }
+                                _partyState.value = patchedParty
+
+                                // Patch active enemy with live stats
+                                val patchedEnemy = enemySlots.mapIndexed { idx, mon ->
+                                    if (idx == 0 && enemyBattleMon != null
+                                        && enemyBattleMon.species == mon.species) {
+                                        mon.copy(
+                                            attack = enemyBattleMon.attack,
+                                            defense = enemyBattleMon.defense,
+                                            speed = enemyBattleMon.speed,
+                                            spAttack = enemyBattleMon.spAttack,
+                                            spDefense = enemyBattleMon.spDefense,
+                                            hp = enemyBattleMon.hp,
+                                            maxHp = enemyBattleMon.maxHp
+                                        )
+                                    } else mon
+                                }
+                                _enemyPartyState.value = patchedEnemy
                             } else {
                                 _enemyPartyState.value = emptyList()
                                 _activePlayerSlot.value = -1
