@@ -360,7 +360,7 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
             val ctx = LocalContext.current
             AsyncImage(
                 model = ImageRequest.Builder(ctx)
-                    .data(SpriteUtils.getSpriteUrl(speciesName))
+                    .data(SpriteUtils.getSpriteUrl(speciesName, mon.personality))
                     .transformations(TopHalfCropTransformation())
                     .build(),
                 contentDescription = speciesName,
@@ -456,7 +456,7 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                 val ctx = LocalContext.current
                 AsyncImage(
                     model = ImageRequest.Builder(ctx)
-                        .data(SpriteUtils.getSpriteUrl(speciesName))
+                        .data(SpriteUtils.getSpriteUrl(speciesName, enemyLead.personality))
                         .transformations(TopHalfCropTransformation())
                         .build(),
                     contentDescription = speciesName,
@@ -787,7 +787,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                     val ctx = LocalContext.current
                     AsyncImage(
                         model = ImageRequest.Builder(ctx)
-                            .data(SpriteUtils.getSpriteUrl(speciesName))
+                            .data(SpriteUtils.getSpriteUrl(speciesName, mon.personality))
                             .transformations(TopHalfCropTransformation())
                             .build(),
                         contentDescription = speciesName,

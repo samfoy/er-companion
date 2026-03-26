@@ -8,6 +8,13 @@ data class MoveData(
 )
 
 object PokemonData {
+    // Form ID ranges based on emerogue species.h
+    const val FORMS_START = 905
+    const val MEGA_START = FORMS_START + 1      // 906-955
+    const val ALOLAN_START = FORMS_START + 51   // 956-973
+    const val GALARIAN_START = FORMS_START + 69 // 974-992
+    const val HISUIAN_START = FORMS_START + 88  // 993-1008
+
     fun getSpeciesName(id: Int): String {
         return SPECIES_NAMES[id] ?: "Unknown #$id"
     }
@@ -22,6 +29,27 @@ object PokemonData {
 
     fun getSpeciesTypes(id: Int): List<Int> {
         return SPECIES_TYPES[id] ?: listOf(0) // Default to Normal type
+    }
+
+    /**
+     * Determine if a species ID is a regional form and return the form suffix.
+     * @return Form suffix (e.g., "Alolan", "Galarian") or null if base form
+     */
+    fun getFormSuffix(speciesId: Int): String? {
+        return when {
+            speciesId in HISUIAN_START..HISUIAN_START + 15 -> "Hisuian"
+            speciesId in GALARIAN_START..GALARIAN_START + 18 -> "Galarian"
+            speciesId in ALOLAN_START..ALOLAN_START + 17 -> "Alolan"
+            speciesId in MEGA_START..MEGA_START + 49 -> "Mega"
+            else -> null
+        }
+    }
+
+    /**
+     * Check if species is Unown (for personality-based form detection)
+     */
+    fun isUnown(speciesId: Int): Boolean {
+        return speciesId == 201 // Unown species ID
     }
 
     private fun speciesNames_0(): Map<Int, String> = mapOf(
