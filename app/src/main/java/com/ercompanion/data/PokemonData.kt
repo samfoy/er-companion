@@ -3434,6 +3434,7 @@ object PokemonData {
         1192 to listOf(5, 2), 1207 to listOf(13, 8), 1208 to listOf(13, 7),
         1209 to listOf(13, 15), 1214 to listOf(7), 1224 to listOf(13, 0),
         1225 to listOf(12, 16), 1227 to listOf(17, 8), 1228 to listOf(1, 8),
-        1232 to listOf(13, 14), 1233 to listOf(13, 7)
+        1232 to listOf(13, 14), 1233 to listOf(13, 7),
+        1370 to listOf(1, 7) // Annihilape - Fighting/Ghost
     )
 }

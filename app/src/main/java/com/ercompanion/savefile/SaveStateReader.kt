@@ -1,6 +1,9 @@
 package com.ercompanion.savefile
 
 import android.content.Context
+import android.content.SharedPreferences
+import com.ercompanion.parser.AddressValidator
+import com.ercompanion.parser.SaveStateAddressScanner
 import java.io.File
 import java.io.RandomAccessFile
 import java.io.ByteArrayOutputStream
@@ -15,6 +18,19 @@ class SaveStateReader(private val context: Context) {
         // ER-specific: gPlayerParty found at EWRAM+0x37780 (GBA: 0x02037780)
         // gPlayerPartyCount at EWRAM+0x3777c (GBA: 0x0203777c)
         // These differ from vanilla Emerald (0x020244F0) due to ER's extra EWRAM data
+
+        // Default addresses for ER mocha build
+        private const val DEFAULT_PARTY_COUNT_OFFSET = 0x3777c
+        private const val DEFAULT_PARTY_OFFSET = 0x37780
+        private const val DEFAULT_GBATTLE_MONS_OFFSET = 0x1c358
+        private const val DEFAULT_GBATTLERS_COUNT_OFFSET = 0x1839c
+
+        // SharedPreferences keys for validated/discovered addresses
+        private const val PREFS_NAME = "er_companion_savestate_prefs"
+        private const val KEY_PARTY_OFFSET = "party_offset"
+        private const val KEY_BATTLE_MONS_OFFSET = "battle_mons_offset"
+        private const val KEY_BATTLERS_COUNT_OFFSET = "battlers_count_offset"
+        private const val KEY_USING_CUSTOM_ADDRESSES = "using_custom_addresses"
 
         // zlib magic bytes
         private val ZLIB_MAGIC = byteArrayOf(0x78.toByte(), 0x9C.toByte())
@@ -43,6 +59,24 @@ class SaveStateReader(private val context: Context) {
     var lastStatus: String = "Not started"
     // Cached EWRAM from last successful decompress — reused by all readers in same poll cycle
     private var cachedEwram: ByteArray? = null
+
+    // SharedPreferences for storing validated addresses
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // Current memory offsets (validated or discovered)
+    private var partyOffset: Int = DEFAULT_PARTY_OFFSET
+    private var battleMonsOffset: Int = DEFAULT_GBATTLE_MONS_OFFSET
+    private var battlersCountOffset: Int = DEFAULT_GBATTLERS_COUNT_OFFSET
+    private var usingCustomAddresses: Boolean = false
+
+    init {
+        // Load cached addresses from previous session
+        partyOffset = prefs.getInt(KEY_PARTY_OFFSET, DEFAULT_PARTY_OFFSET)
+        battleMonsOffset = prefs.getInt(KEY_BATTLE_MONS_OFFSET, DEFAULT_GBATTLE_MONS_OFFSET)
+        battlersCountOffset = prefs.getInt(KEY_BATTLERS_COUNT_OFFSET, DEFAULT_GBATTLERS_COUNT_OFFSET)
+        usingCustomAddresses = prefs.getBoolean(KEY_USING_CUSTOM_ADDRESSES, false)
+    }
 
     fun findStateFile(): File? {
         for (path in SEARCH_PATHS) {
@@ -132,37 +166,69 @@ class SaveStateReader(private val context: Context) {
         val ewram = stateBytes.copyOfRange(EWRAM_OFFSET.toInt(), EWRAM_OFFSET.toInt() + 0x40000)
         cachedEwram = ewram
 
+        // Validate current party address before using it
+        val validationResult = AddressValidator.validatePartyAddress(ewram, partyOffset)
+
+        if (!validationResult.isValid || validationResult.confidence < 0.5) {
+            // Address validation failed - trigger scanning
+            lastStatus = "Address validation failed: ${validationResult.reason}. Scanning EWRAM..."
+
+            val scanResult = SaveStateAddressScanner.scanForParty(ewram)
+            if (scanResult.partyOffset >= 0 && scanResult.confidence >= 0.6) {
+                // Found new party address
+                partyOffset = scanResult.partyOffset
+                usingCustomAddresses = true
+                saveAddresses()
+
+                lastStatus = "Discovered new party address: 0x${partyOffset.toString(16)} (confidence: ${String.format("%.2f", scanResult.confidence)})"
+            } else {
+                lastStatus = "Failed to locate party data: ${scanResult.details}"
+                return null
+            }
+        }
+
         // gPlayerPartyCount at 0x3777c is UNRELIABLE in ER mocha (can be 16+, used for run state).
-        // Instead: read all 12 slots at the known fixed address, return the full 12-slot buffer.
-        // The ViewModel splits player/enemy by OT ID.
-        val partyStart = 0x3777c + 4
+        // Instead: read all 12 slots at the discovered/validated address, return the full 12-slot buffer.
+        // parseParty() will do contiguous slot detection with OT ID filtering.
+        val partyStart = partyOffset + 4
         if (partyStart + 12 * 104 > ewram.size) {
-            lastStatus = "EWRAM too small for party buffer"
+            lastStatus = "EWRAM too small for party buffer at offset 0x${partyOffset.toString(16)}"
             return null
         }
         val partyBytes = ewram.copyOfRange(partyStart, partyStart + 12 * 104)
-        cachedPartyOffset = 0x3777c
+        cachedPartyOffset = partyOffset
 
-        // Count valid player slots (non-empty personality, valid level/HP)
-        // Use OT ID from first non-empty slot as the player's ID
+        // Detect contiguous valid player slots using OT ID from first valid Pokemon
         var playerOtId = -1L
         var validCount = 0
         for (i in 0 until 12) {
             val monOff = i * 104
             val personality = readU32LE(partyBytes, monOff)
-            if (personality == 0L) continue
+            if (personality == 0L) break // Stop at first empty slot
+
             val otId = readU32LE(partyBytes, monOff + 4)
-            if (playerOtId < 0) playerOtId = otId
-            if (otId == playerOtId && isValidMon(partyBytes, monOff)) validCount++
+            if (playerOtId < 0) {
+                playerOtId = otId // First valid mon establishes player OT ID
+            }
+
+            // Stop if OT ID doesn't match (enemy Pokemon)
+            if (otId != playerOtId) break
+
+            // Stop if invalid Pokemon data
+            if (!isValidMon(partyBytes, monOff)) break
+
+            validCount++
         }
+
         if (validCount == 0) {
-            lastStatus = "No valid player mons at 0x3777c. State may be outdated."
+            lastStatus = "No valid player mons at 0x${partyOffset.toString(16)}. State may be outdated."
             return null
         }
 
         val fileAge = (System.currentTimeMillis() - file.lastModified()) / 1000
-        lastStatus = "OK: ${file.name}, playerMons=$validCount otId=0x${playerOtId.toString(16)}, ${fileAge}s ago"
-        return Pair(12, partyBytes)  // always return all 12 slots; ViewModel does OT filtering
+        val addressInfo = if (usingCustomAddresses) " [custom addr]" else ""
+        lastStatus = "OK: ${file.name}, playerMons=$validCount otId=0x${playerOtId.toString(16)}, ${fileAge}s ago$addressInfo"
+        return Pair(12, partyBytes)  // always return all 12 slots; parseParty() does contiguous detection
     }
 
     fun readRawPartyBuffer(): ByteArray? {
@@ -184,23 +250,47 @@ class SaveStateReader(private val context: Context) {
      *   +0x00 species, +0x02 atk, +0x04 def, +0x06 spd, +0x08 spa, +0x0a spdef
      *   +0x0c moves[4], +0x18 statStages[8] (s8, baseline=6 not 0)
      *   +0x2a hp, +0x2c level, +0x2e maxHP
+     *
+     * CRITICAL: The attack/defense/speed/spAttack/spDefense values are ALREADY MODIFIED
+     * by stat stages. The game applies the stat stage multipliers when calculating these
+     * values. The statStages array is for display/tracking purposes only.
+     *
+     * Stat stage mechanics:
+     * - Baseline (neutral) = 6, range is 0-12 (corresponds to -6 to +6 stages)
+     * - Multiplier = gStatStageRatios[stage][0] / gStatStageRatios[stage][1]
+     * - The stats in this structure are already: base_stat * stage_multiplier
+     * - DO NOT apply stat stage modifiers again when using these stats!
      */
     data class BattleMon(
         val species: Int,
-        val attack: Int, val defense: Int, val speed: Int,
-        val spAttack: Int, val spDefense: Int,
+        val attack: Int, val defense: Int, val speed: Int,  // Already POST stat stages!
+        val spAttack: Int, val spDefense: Int,              // Already POST stat stages!
         val moves: List<Int>,
-        val statStages: List<Int>,  // raw values, baseline=6; actual modifier = stages[i]-6
+        val statStages: List<Int>,  // raw values, baseline=6; FOR DISPLAY ONLY
         val hp: Int, val maxHp: Int, val level: Int
     )
 
     fun readBattleMons(): List<BattleMon?> {
         val ewram = cachedEwram ?: return emptyList()
-        val GBATTLE_MONS_OFFSET = 0x1c358
+
+        // Validate battle address on first use (lightweight check)
+        if (!usingCustomAddresses) {
+            val battleValidation = AddressValidator.validateBattleAddress(ewram, battleMonsOffset)
+            if (!battleValidation.isValid && battleValidation.confidence < 0.3) {
+                // Try to scan for battle address
+                val scanResult = SaveStateAddressScanner.scanForBattleMons(ewram)
+                if (scanResult.battleMonsOffset >= 0 && scanResult.confidence >= 0.6) {
+                    battleMonsOffset = scanResult.battleMonsOffset
+                    usingCustomAddresses = true
+                    saveAddresses()
+                }
+            }
+        }
+
         val STRUCT_SIZE = 0x60
         val result = mutableListOf<BattleMon?>()
         for (i in 0 until 4) {
-            val base = GBATTLE_MONS_OFFSET + i * STRUCT_SIZE
+            val base = battleMonsOffset + i * STRUCT_SIZE
             if (base + STRUCT_SIZE > ewram.size) { result.add(null); continue }
             val species = readU16LE(ewram, base).toInt()
             if (species == 0 || species > 2000) { result.add(null); continue }
@@ -226,28 +316,88 @@ class SaveStateReader(private val context: Context) {
 
     fun readInBattle(): Boolean {
         val ewram = cachedEwram ?: return false
-        val BATTLERS_COUNT_OFFSET = 0x1839c
-        if (BATTLERS_COUNT_OFFSET >= ewram.size) return false
-        return ewram[BATTLERS_COUNT_OFFSET].toInt() and 0xFF == 2
+        if (battlersCountOffset >= ewram.size) return false
+        val battlersCount = ewram[battlersCountOffset].toInt() and 0xFF
+        return battlersCount == 2 || battlersCount == 4  // Singles or doubles
     }
 
     /**
-     * Read gBattlerPartyIndexes[0] (active player party slot) from EWRAM.
-     * Confirmed address: EWRAM+0x1839c = gBattlersCount (u8), +0x1839d = pad,
-     * +0x1839e = gBattlerPartyIndexes[0] (u16, player active slot 0-5),
-     * +0x183a0 = gBattlerPartyIndexes[1] (u16, enemy active party slot).
-     * Returns -1 if not in battle (gBattlersCount != 2).
+     * Read gBattlerPartyIndexes for active player slots from EWRAM.
+     * Returns list of 0-2 active player party indexes (0-5).
+     *
+     * Memory layout:
+     * +0x0: gBattlersCount (u8)
+     * +0x2: gBattlerPartyIndexes[0] (u16) - Player slot 1
+     * +0x4: gBattlerPartyIndexes[1] (u16) - Enemy slot 1
+     * +0x6: gBattlerPartyIndexes[2] (u16) - Player slot 2 (doubles only)
+     * +0x8: gBattlerPartyIndexes[3] (u16) - Enemy slot 2 (doubles only)
+     */
+    fun readActivePlayerSlots(): List<Int> {
+        val ewram = cachedEwram ?: return emptyList()
+        if (battlersCountOffset + 10 > ewram.size) return emptyList()
+
+        val battlersCount = ewram[battlersCountOffset].toInt() and 0xFF
+        if (battlersCount != 2 && battlersCount != 4) return emptyList()
+
+        val slots = mutableListOf<Int>()
+
+        // Player slot 1 (battler index 0)
+        val slot0 = readU16LE(ewram, battlersCountOffset + 2).toInt()
+        if (slot0 in 0..5) slots.add(slot0)
+
+        // Player slot 2 (battler index 2) - only in doubles
+        if (battlersCount == 4) {
+            val slot2 = readU16LE(ewram, battlersCountOffset + 6).toInt()
+            if (slot2 in 0..5 && slot2 != 0xFE && slot2 != 0xFF) {
+                slots.add(slot2)
+            }
+        }
+
+        return slots
+    }
+
+    /**
+     * Read gBattlerPartyIndexes for active enemy slots from EWRAM.
+     * Returns list of 0-2 active enemy party indexes (0-5).
+     */
+    fun readActiveEnemySlots(): List<Int> {
+        val ewram = cachedEwram ?: return emptyList()
+        if (battlersCountOffset + 10 > ewram.size) return emptyList()
+
+        val battlersCount = ewram[battlersCountOffset].toInt() and 0xFF
+        if (battlersCount != 2 && battlersCount != 4) return emptyList()
+
+        val slots = mutableListOf<Int>()
+
+        // Enemy slot 1 (battler index 1)
+        val slot1 = readU16LE(ewram, battlersCountOffset + 4).toInt()
+        if (slot1 in 0..5) slots.add(slot1)
+
+        // Enemy slot 2 (battler index 3) - only in doubles
+        if (battlersCount == 4) {
+            val slot3 = readU16LE(ewram, battlersCountOffset + 8).toInt()
+            if (slot3 in 0..5 && slot3 != 0xFE && slot3 != 0xFF) {
+                slots.add(slot3)
+            }
+        }
+
+        return slots
+    }
+
+    /**
+     * Legacy single-slot reader for backwards compatibility.
+     * Returns first active player slot, or -1 if not in battle.
      */
     fun readActivePlayerSlot(): Int {
-        val ewram = cachedEwram ?: return -1
-        val BATTLERS_COUNT_OFFSET = 0x1839c
-        if (BATTLERS_COUNT_OFFSET + 6 > ewram.size) return -1
-        val battlersCount = ewram[BATTLERS_COUNT_OFFSET].toInt() and 0xFF
-        if (battlersCount != 2) return -1  // not in singles battle
-        // gBattlerPartyIndexes[0] = player active slot (u16 at +2)
-        val playerSlot = (ewram[BATTLERS_COUNT_OFFSET + 2].toInt() and 0xFF) or
-                         ((ewram[BATTLERS_COUNT_OFFSET + 3].toInt() and 0xFF) shl 8)
-        return if (playerSlot in 0..5) playerSlot else -1
+        return readActivePlayerSlots().firstOrNull() ?: -1
+    }
+
+    /**
+     * Legacy single-slot reader for backwards compatibility.
+     * Returns first active enemy slot, or -1 if not in battle.
+     */
+    fun readActiveEnemySlot(): Int {
+        return readActiveEnemySlots().firstOrNull() ?: -1
     }
 
     // Read enemy party from save state — gEnemyPartyCount is 1 byte after gPlayerPartyCount,
@@ -580,4 +730,59 @@ class SaveStateReader(private val context: Context) {
         cachedPartyOffset = -1
         cachedEwram = null
     }
+
+    /**
+     * Save validated/discovered addresses to SharedPreferences for future sessions.
+     */
+    private fun saveAddresses() {
+        prefs.edit()
+            .putInt(KEY_PARTY_OFFSET, partyOffset)
+            .putInt(KEY_BATTLE_MONS_OFFSET, battleMonsOffset)
+            .putInt(KEY_BATTLERS_COUNT_OFFSET, battlersCountOffset)
+            .putBoolean(KEY_USING_CUSTOM_ADDRESSES, usingCustomAddresses)
+            .apply()
+    }
+
+    /**
+     * Manually override memory addresses (advanced settings).
+     * Use this when addresses are known to be different for a specific build.
+     */
+    fun setManualAddresses(party: Int, battleMons: Int, battlersCount: Int) {
+        partyOffset = party
+        battleMonsOffset = battleMons
+        battlersCountOffset = battlersCount
+        usingCustomAddresses = true
+        saveAddresses()
+        lastStatus = "Manual addresses set: party=0x${party.toString(16)}, battle=0x${battleMons.toString(16)}"
+    }
+
+    /**
+     * Reset to default ER mocha addresses.
+     */
+    fun resetToDefaultAddresses() {
+        partyOffset = DEFAULT_PARTY_OFFSET
+        battleMonsOffset = DEFAULT_GBATTLE_MONS_OFFSET
+        battlersCountOffset = DEFAULT_GBATTLERS_COUNT_OFFSET
+        usingCustomAddresses = false
+        saveAddresses()
+        lastStatus = "Reset to default ER mocha addresses"
+    }
+
+    /**
+     * Get current memory addresses and their source (default or discovered).
+     */
+    fun getAddressInfo(): String {
+        val source = if (usingCustomAddresses) "discovered/custom" else "default (ER mocha)"
+        return """
+            Memory Addresses ($source):
+            - Party: 0x${partyOffset.toString(16)}
+            - Battle Mons: 0x${battleMonsOffset.toString(16)}
+            - Battlers Count: 0x${battlersCountOffset.toString(16)}
+        """.trimIndent()
+    }
+
+    /**
+     * Check if currently using non-default addresses.
+     */
+    fun isUsingCustomAddresses(): Boolean = usingCustomAddresses
 }

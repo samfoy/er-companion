@@ -86,8 +86,14 @@ object BattleAISimulator {
                         defenderTypes = targetTypes,
                         targetMaxHP = target.maxHp
                     )
-                    damage = result.minDamage
-                    damagePercent = if (target.maxHp > 0) (damage * 100 / target.maxHp) else 0
+                    // Handle invalid results (pre-battle stats)
+                    if (!result.isValid) {
+                        damage = 0
+                        damagePercent = 0
+                    } else {
+                        damage = result.minDamage
+                        damagePercent = if (target.maxHp > 0) (damage * 100 / target.maxHp) else 0
+                    }
                 } else {
                     damage = 0
                     damagePercent = 0

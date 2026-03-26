@@ -51,21 +51,33 @@ object Gen3PokemonParser {
         intArrayOf(3, 1, 2, 0), intArrayOf(3, 2, 0, 1), intArrayOf(3, 2, 1, 0)
     )
 
-    fun parseParty(data: ByteArray, partyCount: Int, filterOtId: Long = -1L): List<PartyMon?> {
-        val party = mutableListOf<PartyMon?>()
+    /**
+     * Parse party with contiguous slot detection and OT ID filtering.
+     * - Always reads up to maxSlots (default 12)
+     * - Automatically detects player's OT ID from first valid Pokemon
+     * - Returns only contiguous valid Pokemon starting from slot 0
+     * - Stops at first null/invalid slot or OT ID mismatch
+     */
+    fun parseParty(data: ByteArray, maxSlots: Int = 12): List<PartyMon> {
+        val party = mutableListOf<PartyMon>()
+        var playerOtId: Long = -1L
 
-        for (i in 0 until minOf(partyCount, 12)) {
+        for (i in 0 until minOf(maxSlots, 12)) {
             val offset = i * POKEMON_SIZE
             if (offset + POKEMON_SIZE > data.size) break
 
             val monData = data.sliceArray(offset until offset + POKEMON_SIZE)
-            val mon = parsePokemon(monData)
-            // If filtering by OT ID, skip mons that belong to other trainers
-            if (mon != null && filterOtId >= 0L && mon.otId != filterOtId) {
-                party.add(null)
-            } else {
-                party.add(mon)
+            val mon = parsePokemon(monData) ?: break // Stop at first null slot
+
+            // First valid Pokemon establishes the player's OT ID
+            if (playerOtId < 0L) {
+                playerOtId = mon.otId
             }
+
+            // Stop if OT ID doesn't match player (enemy Pokemon in buffer)
+            if (mon.otId != playerOtId) break
+
+            party.add(mon)
         }
 
         return party

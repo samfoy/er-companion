@@ -159,6 +159,48 @@ val power = 30 + (((ivHp>>1)&1) + ((ivAtk>>1)&1)*2 + ((ivDef>>1)&1)*4 +
 - Paralysis/Burn/Poison: 1.5x
 - None: 1.0x
 
+## Address Validation & Scanning
+
+### Automatic Address Discovery
+The app now includes address validation and scanning to handle different ER builds:
+
+1. **AddressValidator**: Validates known addresses before reading data
+   - Checks for valid personality values (non-zero, reasonable range)
+   - Verifies gBattlersCount is 0-4 (not random garbage)
+   - Confirms species IDs are in 1-1526 range
+   - Returns confidence score (0.0-1.0)
+
+2. **SaveStateAddressScanner**: Scans EWRAM for patterns when validation fails
+   - Searches for Gen3 Pokemon structure sequences
+   - Validates encrypted substructures with checksums
+   - Finds contiguous OT IDs (player Pokemon share same OT ID)
+   - Locates battle structure patterns with reasonable stat values
+   - Performance: ~10ms scan time for 256KB EWRAM
+
+3. **SaveStateReader Integration**:
+   - Validates addresses on first read
+   - Triggers scanning if validation fails (confidence < 0.5)
+   - Caches discovered addresses in SharedPreferences
+   - Falls back gracefully if scanning fails
+   - Adds logging for address mismatches (helps debug different builds)
+
+### Manual Address Override
+For advanced users or different ER builds:
+```kotlin
+saveStateReader.setManualAddresses(
+    party = 0x37780,
+    battleMons = 0x1c358,
+    battlersCount = 0x1839c
+)
+```
+
+### Address Configuration UI
+The app displays:
+- Current addresses and their source (default/discovered/custom)
+- Confidence score for validated addresses
+- Indicator when using non-default addresses
+- Option to reset to default ER mocha addresses
+
 ## Notes
 
 ### Emerald Rogue Specifics
@@ -167,6 +209,7 @@ val power = 30 + (((ivHp>>1)&1) + ((ivAtk>>1)&1)*2 + ((ivDef>>1)&1)*4 +
 3. **Gen 9 mechanics**: Hidden Power supports all 18 types including Fairy
 4. **Stats are pre-calculated**: Stats in memory already include IVs/EVs/Nature modifiers
 5. **OT ID filtering**: Required to separate player Pokemon from enemy/wild Pokemon in the 12-slot buffer
+6. **Build resilience**: Address validation and scanning make the app work across different ER versions
 
 ### UDP Streaming vs Save States
 - **Save States**: Use RASTATE format with MEM chunk containing raw mGBA state
