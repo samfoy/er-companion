@@ -161,8 +161,6 @@ object Gen3PokemonParser {
 
         // Validate — ER has up to 1526 species
         if (species == 0 || species > 1526) {
-            // Debug: log why validation failed
-            android.util.Log.w("Gen3PokemonParser", "Parse failed: species=$species (PID=0x${personality.toString(16)}, level=$level, hp=$hp/$maxHp)")
             return null
         }
 

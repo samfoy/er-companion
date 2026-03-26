@@ -149,28 +149,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Read party data via UDP
         val (partyCountAddr, partyDataAddr) = addresses
 
-        // Read 12 slots to see if Pupitar might be in a different position
-        // (normally 6 for player, but let's check extended region for debugging)
-        val partyData = client.readMemory(partyDataAddr, 104 * 12) ?: run {
+        // Read only 6 slots for player party (not 12 - that would read into enemy party)
+        val partyData = client.readMemory(partyDataAddr, 104 * 6) ?: run {
             _errorMessage.value = "UDP: Failed to read memory at 0x${partyDataAddr.toString(16)}"
             return false
         }
 
-        // DEBUG: Check all 12 slots for Pupitar's PID (0xa9691b3b)
-        for (i in 0 until 12) {
-            val offset = i * 104
-            if (offset + 104 <= partyData.size) {
-                val slotData = partyData.sliceArray(offset until offset + 104)
-                val personality = ((slotData[0].toInt() and 0xFF) or
-                                  ((slotData[1].toInt() and 0xFF) shl 8) or
-                                  ((slotData[2].toInt() and 0xFF) shl 16) or
-                                  ((slotData[3].toInt() and 0xFF) shl 24)).toUInt()
-                if (personality == 0xa9691b3bu) {
-                    val mon = Gen3PokemonParser.parsePokemon(slotData)
-                    android.util.Log.w("MainViewModel", "Found Pupitar PID at slot $i: ${if (mon != null) "VALID" else "CORRUPTED"}")
-                }
-            }
-        }
 
         // Parse player party (6 slots) - debug which slots are valid
         val playerSlots = mutableListOf<PartyMon>()
@@ -184,9 +168,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (mon != null) {
                     playerSlots.add(mon)
                     slotDebug.add("$i:${com.ercompanion.data.PokemonData.getSpeciesName(mon.species)}")
-                    android.util.Log.d("MainViewModel", "Slot $i: VALID - ${com.ercompanion.data.PokemonData.getSpeciesName(mon.species)}")
                 } else {
-                    // Check why this slot is invalid - show more details for debugging
+                    // Check why this slot is invalid - show details for debugging
                     val personality = ((slotData[0].toInt() and 0xFF) or
                                       ((slotData[1].toInt() and 0xFF) shl 8) or
                                       ((slotData[2].toInt() and 0xFF) shl 16) or
@@ -195,7 +178,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val hp = ((slotData[0x56].toInt() and 0xFF) or ((slotData[0x57].toInt() and 0xFF) shl 8))
                     val maxHp = ((slotData[0x58].toInt() and 0xFF) or ((slotData[0x59].toInt() and 0xFF) shl 8))
                     slotDebug.add("$i:INVALID(p=0x${personality.toString(16)},lv=$level,hp=$hp/$maxHp)")
-                    android.util.Log.d("MainViewModel", "Slot $i: INVALID - PID=0x${personality.toString(16)}, lv=$level, hp=$hp/$maxHp")
                 }
             }
         }
@@ -231,8 +213,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // In single battle: [0]=player, [1]=enemy
         // In double battle: [0]=player1, [1]=enemy1, [2]=player2, [3]=enemy2
         val playerBattleData = client.readMemory(battleMonsAddr, 0x60)
-
-        android.util.Log.d("MainViewModel", "Battle info: battlersCount=$battlersCount, partyIndexes=$partyIndexes")
 
         var activeBattleMon: PartyMon? = null
         if (playerBattleData != null) {
@@ -275,8 +255,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Build final party using cache
         val finalParty = mutableListOf<PartyMon>()
 
-        android.util.Log.d("MainViewModel", "Active battle mon: ${activeBattleMon?.let { com.ercompanion.data.PokemonData.getSpeciesName(it.species) } ?: "null"}")
-
         // Parse all 6 slots
         for (i in 0 until 6) {
             val offset = i * 104
@@ -291,7 +269,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (activeBattleMon != null && parsedMon.species == activeBattleMon.species) {
                     pokemonCache[activeBattleMon.personality] = activeBattleMon
                     finalParty.add(activeBattleMon)
-                    android.util.Log.d("MainViewModel", "Slot $i: Using battle stats for ${com.ercompanion.data.PokemonData.getSpeciesName(activeBattleMon.species)}")
                 } else {
                     finalParty.add(parsedMon)
                 }
@@ -309,15 +286,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val maxHp = ((slotData[0x58].toInt() and 0xFF) or ((slotData[0x59].toInt() and 0xFF) shl 8))
                     val recoveredMon = cachedMon.copy(hp = hp, maxHp = maxHp)
                     finalParty.add(recoveredMon)
-                    android.util.Log.d("MainViewModel", "Slot $i: RECOVERED ${com.ercompanion.data.PokemonData.getSpeciesName(cachedMon.species)} from cache (PID=0x${personality.toString(16)})")
-                } else {
-                    android.util.Log.w("MainViewModel", "Slot $i: CORRUPTED and not in cache (PID=0x${personality.toString(16)})")
                 }
             }
         }
 
-        android.util.Log.d("MainViewModel", "Final party size: ${finalParty.size}, Pokemon: ${finalParty.map { com.ercompanion.data.PokemonData.getSpeciesName(it.species) }}")
-        android.util.Log.d("MainViewModel", "Cache size: ${pokemonCache.size} Pokemon")
         _partyState.value = finalParty.take(6)
 
         // Read full enemy team from gEnemyParty (624 bytes after player party)
