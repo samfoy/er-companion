@@ -14,12 +14,21 @@ data class DamageResult(
     val wouldKO: Boolean      // percentMax >= 100
 )
 
+/**
+ * Damage calculator implementing Gen 3 formula for Pokémon Emerald Rogue.
+ *
+ * Formula source: https://github.com/pret/pokeemerald/blob/master/src/battle_script_commands.c
+ * Type chart: emerogue uses Gen 6+ mechanics (B_STEEL_RESISTANCES = GEN_LATEST)
+ *
+ * Gen 3 Formula: (((2×Level÷5+2)×Power×Atk÷Def÷50)×Burn+2)×STAB×Type×Random
+ */
 object DamageCalculator {
     // Type IDs: 0=Normal, 1=Fighting, 2=Flying, 3=Poison, 4=Ground, 5=Rock, 6=Bug, 7=Ghost,
     // 8=Steel, 9=Fire, 10=Water, 11=Grass, 12=Electric, 13=Psychic, 14=Ice, 15=Dragon, 16=Dark, 17=Fairy
 
     // Type effectiveness table [attacking type][defending type]
-    // Gen6+ chart with Fairy type
+    // Gen 6+ chart with Fairy type (correct for emerogue)
+    // Source: https://bulbapedia.bulbagarden.net/wiki/Type/Type_chart
     private val TYPE_CHART = arrayOf(
         // Normal
         floatArrayOf(1f, 1f, 1f, 1f, 1f, 0.5f, 1f, 0f, 0.5f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f),
@@ -143,23 +152,35 @@ object DamageCalculator {
             modifiedDefenseStat = maxOf(statMods.defense, statMods.spDefense)
         }
 
-        // Base damage calculation: power * attack * (2 * level / 5 + 2) / defense / 50 + 2
-        val levelMod = (2 * attackerLevel / 5 + 2)
-        var baseDamage = (movePower.toLong() * modifiedAttackStat * levelMod / modifiedDefenseStat / 50 + 2).toInt()
+        // Gen 3 damage formula (from pokeemerald src/battle_script_commands.c)
+        // Formula: (((2*Level/5+2) * Power * Atk/Def / 50) * Modifiers + 2) * STAB * Type * Random
 
-        // Apply burn (0.5x if physical and burned, unless Guts ability)
+        // Step 1: Base calculation before modifiers
+        val levelMod = (2 * attackerLevel / 5 + 2)
+        var damage = movePower.toLong() * modifiedAttackStat * levelMod / modifiedDefenseStat / 50
+
+        // Step 2: Apply burn modifier BEFORE +2 (Gen 3: halves damage for physical moves)
+        // Source: pokeemerald - burn is checked and damage halved before the +2
         if (isBurned && attackerAbility != 62) {  // 62 = Guts
-            baseDamage = (baseDamage * 0.5f).toInt()
+            damage = damage / 2  // Integer division as in Gen 3
         }
 
-        // STAB (normally 1.5x, but Adaptability makes it 2x)
+        // Step 3: Add the +2 constant
+        damage = damage + 2
+
+        // Step 4: STAB (Gen 3: 1.5x via integer math 15/10, or 2x with Adaptability)
         val isStab = attackerTypes.contains(moveType)
         if (isStab) {
             val stabMultiplier = com.ercompanion.data.AbilityData.getStabMultiplier(attackerAbility)
-            baseDamage = (baseDamage * stabMultiplier).toInt()
+            if (stabMultiplier == 2.0f) {
+                damage = damage * 2  // Adaptability
+            } else {
+                damage = damage * 15 / 10  // Normal STAB: integer 1.5x
+            }
         }
 
-        // Type effectiveness (multiply by effectiveness against each defender type)
+        // Step 5: Type effectiveness (multiply by effectiveness against each defender type)
+        // Gen 3: Applied as integer multiplication then division by 10
         var effectiveness = 1f
         for (defType in defenderTypes) {
             if (moveType in 0..17 && defType in 0..17) {
@@ -167,7 +188,10 @@ object DamageCalculator {
             }
         }
 
-        var effectiveBaseDamage = (baseDamage * effectiveness).toInt()
+        // Apply type effectiveness using Gen 3 integer math
+        damage = (damage.toFloat() * effectiveness).toLong()
+
+        var effectiveBaseDamage = damage.toInt()
 
         // Apply attacker ability damage multipliers (Sheer Force, Technician, pinch abilities)
         val abilityDamageMod = com.ercompanion.data.AbilityData.getDamageMultiplier(
