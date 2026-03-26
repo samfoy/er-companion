@@ -2,6 +2,7 @@ package com.ercompanion.parser
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.pow
 
 data class PartyMon(
     val species: Int,
@@ -28,7 +29,9 @@ data class PartyMon(
     val ivSpDefense: Int = 0,
     val status: Int = 0,        // Status condition flags
     val movePP: List<Int> = listOf(0, 0, 0, 0),  // PP for each move
-    val otId: Long = 0L
+    val otId: Long = 0L,
+    val nature: UInt = 0u,      // Effective nature (accounts for mints in ER)
+    val abilitySlot: Int = 0    // 0=ability1, 1=ability2, 2=hidden ability
 )
 
 object Gen3PokemonParser {
@@ -85,7 +88,13 @@ object Gen3PokemonParser {
         val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
 
         // Read BoxPokemon structure (80 bytes)
-        val personality = buffer.getInt(0).toUInt()
+        // Read personality as 4 bytes manually to ensure correct unsigned conversion
+        val p0 = buffer.get(0).toInt() and 0xFF
+        val p1 = buffer.get(1).toInt() and 0xFF
+        val p2 = buffer.get(2).toInt() and 0xFF
+        val p3 = buffer.get(3).toInt() and 0xFF
+        val personality = (p0 or (p1 shl 8) or (p2 shl 16) or (p3 shl 24)).toUInt()
+
         val otId = buffer.getInt(4).toUInt()
 
         if (personality == 0u) return null
@@ -95,6 +104,10 @@ object Gen3PokemonParser {
         buffer.position(0x08)
         buffer.get(nicknameBytes)
         val nickname = decodeGen3String(nicknameBytes)
+
+        // Read hiddenNatureModifier at offset 0x12, bits 3-7 (for mint detection)
+        val languageAndNature = readU8(data, 0x12)
+        val hiddenNatureModifier = ((languageAndNature shr 3) and 0x1F).toUInt()
 
         // Decrypt substructures (48 bytes starting at offset 0x20)
         val encryptedData = ByteArray(48)
@@ -123,8 +136,17 @@ object Gen3PokemonParser {
         val ivSpAttack = ((ivData shr 20) and 0x1Fu).toInt()
         val ivSpDefense = ((ivData shr 25) and 0x1Fu).toInt()
 
-        // Parse substructure D (Misc): ability at offset +1
-        val ability = readU8(substructures[3], 1)
+        // Parse substructure D (Misc): ability at offset +1, ivEggAbility at offset +4
+        val ivEggAbility = readU32(substructures[3], 4)
+        // Nature: calculate base nature from personality, then apply mint modifier (XOR)
+        // hiddenNatureModifier is stored at offset 0x12, bits 3-7 in BoxPokemon structure
+        // If hiddenNatureModifier is 0, no mint was used
+        val baseNature = personality % 25u
+        val effectiveNature = baseNature xor hiddenNatureModifier
+        // ER stores ability slot - bits 2-3 of ivEggAbility
+        val abilitySlot = ((ivEggAbility shr 2) and 0x3u).toInt()
+        // Look up actual ability ID from species + slot
+        val ability = com.ercompanion.data.SpeciesAbilities.getAbility(species, abilitySlot)
 
         // Read Pokemon extra fields (after BoxPokemon, offset 0x50)
         val status = readU32(data, 0x50).toInt()
@@ -138,13 +160,31 @@ object Gen3PokemonParser {
         val spDefense = readU16(data, 0x62)
 
         // Validate — ER has up to 1526 species
-        if (species == 0 || species > 1526 || level == 0 || level > 100) {
+        if (species == 0 || species > 1526) {
+            // Debug: log why validation failed
+            android.util.Log.w("Gen3PokemonParser", "Parse failed: species=$species (PID=0x${personality.toString(16)}, level=$level, hp=$hp/$maxHp)")
             return null
         }
 
+        // Level validation: if unencrypted level is 0 or invalid, calculate from experience
+        // (can happen when Pokemon switches out during battle - level field not maintained)
+        val validLevel = if (level in 1..100) {
+            level
+        } else {
+            // Rough approximation: level from experience (for medium-fast growth rate)
+            // This is a fallback - most Pokemon will have valid level
+            val approxLevel = if (experience > 0u) {
+                (experience.toDouble().pow(1.0/3.0)).toInt().coerceIn(1, 100)
+            } else {
+                1 // Default to level 1 if no experience data
+            }
+            approxLevel
+        }
+
+
         return PartyMon(
             species = species,
-            level = level,
+            level = validLevel,
             hp = hp,
             maxHp = maxHp,
             nickname = nickname,
@@ -167,7 +207,9 @@ object Gen3PokemonParser {
             ivSpDefense = ivSpDefense,
             status = status,
             movePP = movePP,
-            otId = otId.toLong() and 0xFFFFFFFFL
+            otId = otId.toLong() and 0xFFFFFFFFL,
+            nature = effectiveNature,
+            abilitySlot = abilitySlot
         )
     }
 

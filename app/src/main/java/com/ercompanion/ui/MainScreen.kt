@@ -49,6 +49,8 @@ fun MainScreen(
     onRescan: () -> Unit
 ) {
     val scrollState = androidx.compose.foundation.rememberScrollState()
+    var showDebug by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -65,7 +67,8 @@ fun MainScreen(
             Text(
                 text = "ER Companion",
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.clickable { showDebug = !showDebug }
             )
 
             Column(horizontalAlignment = Alignment.End) {
@@ -123,8 +126,8 @@ fun MainScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Error or status message
-        if (errorMessage != null) {
+        // Debug info (hidden by default, tap title to show)
+        if (showDebug && errorMessage != null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -260,7 +263,8 @@ fun MainScreen(
                                     enemyLead = enemy,
                                     activeMon = activeMon,
                                     viewModel = viewModel,
-                                    enemyPartyState = enemyPartyState
+                                    enemyPartyState = enemyPartyState,
+                                    dataSource = dataSource
                                 )
                             } else {
                                 // Collapsed enemy chip
@@ -424,7 +428,7 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
 }
 
 @Composable
-fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainViewModel, enemyPartyState: List<PartyMon?>) {
+fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainViewModel, enemyPartyState: List<PartyMon?>, dataSource: MainViewModel.DataSource) {
     val speciesName = PokemonData.getSpeciesName(enemyLead.species)
     val types = PokemonData.getSpeciesTypes(enemyLead.species)
     val typeNames = types.map { typeId ->
@@ -482,20 +486,24 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                     }
                     // Ability indicator
                     if (enemyLead.ability > 0) {
-                        val abilityEffect = com.ercompanion.data.AbilityData.getAbilityEffect(enemyLead.ability)
-                        if (abilityEffect != null) {
-                            Text(
-                                text = "✨ ${abilityEffect.name}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF9C27B0),
-                                fontSize = 9.sp,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
+                        val abilityName = com.ercompanion.data.AbilityData.getAbilityName(enemyLead.ability)
+                        val isHidden = com.ercompanion.data.SpeciesAbilities.isHiddenAbility(enemyLead.species, enemyLead.abilitySlot)
+                        val abilityText = if (isHidden) {
+                            "✨ $abilityName (HA)"
+                        } else {
+                            "✨ $abilityName"
                         }
+                        Text(
+                            text = abilityText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF9C27B0),
+                            fontSize = 9.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
                     // Nature indicator
                     if (enemyLead.personality > 0u) {
-                        val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(enemyLead.personality)
+                        val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(enemyLead.nature)
                         if (!nature.isNeutral) {
                             Text(
                                 text = "🌟 ${nature.name} (+${nature.increasedStat} -${nature.decreasedStat})",
@@ -602,8 +610,63 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                 }
             }
 
-            // Catch chance calculator (for wild Pokemon)
-            if (enemyPartyState.size == 1 && activeMon != null) {
+            // Enemy moves with damage calculations
+            if (enemyLead.moves.isNotEmpty() && activeMon != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = Color(0xFF3A2A2A))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "⚔ Enemy Moves",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                enemyLead.moves.forEach { moveId ->
+                    val moveData = com.ercompanion.data.PokemonData.getMoveData(moveId)
+                    if (moveData != null) {
+                        val damage = viewModel.calcDamage(enemyLead, activeMon, moveData)
+                        val damagePercent = (damage.toFloat() / activeMon.maxHp.toFloat() * 100).toInt()
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = moveData.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 11.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                TypeBadge(moveData.type)
+                            }
+                            val damageColor = when {
+                                damagePercent >= 75 -> Color(0xFFFF6B6B)  // Red - very dangerous
+                                damagePercent >= 50 -> Color(0xFFFF9800)  // Orange - dangerous
+                                damagePercent >= 25 -> Color(0xFFFFEB3B)  // Yellow - moderate
+                                else -> Color(0xFF4CAF50)  // Green - safe
+                            }
+                            Text(
+                                text = "${damage}dmg (${damagePercent}%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = damageColor
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Catch chance calculator (for wild Pokemon) - only show in save state mode
+            if (dataSource == MainViewModel.DataSource.SAVE_STATE && enemyPartyState.size == 1 && activeMon != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider(color = Color(0xFF3A2A2A))
                 Spacer(modifier = Modifier.height(6.dp))
@@ -775,20 +838,24 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         }
                         // Ability indicator
                         if (mon.ability > 0) {
-                            val abilityEffect = com.ercompanion.data.AbilityData.getAbilityEffect(mon.ability)
-                            if (abilityEffect != null) {
-                                Text(
-                                    text = "✨ ${abilityEffect.name}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF9C27B0),
-                                    fontSize = 9.sp,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
+                            val abilityName = com.ercompanion.data.AbilityData.getAbilityName(mon.ability)
+                            val isHidden = com.ercompanion.data.SpeciesAbilities.isHiddenAbility(mon.species, mon.abilitySlot)
+                            val abilityText = if (isHidden) {
+                                "✨ $abilityName (HA)"
+                            } else {
+                                "✨ $abilityName"
                             }
+                            Text(
+                                text = abilityText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF9C27B0),
+                                fontSize = 9.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
                         }
                         // Nature indicator
                         if (mon.personality > 0u) {
-                            val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.personality)
+                            val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.nature)
                             if (!nature.isNeutral) {
                                 Text(
                                     text = "🌟 ${nature.name}",
@@ -801,7 +868,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         }
                         // Type badges
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
                             val types = PokemonData.getSpeciesTypes(mon.species)
@@ -905,7 +972,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
 
                     // Nature display
                     if (mon.personality > 0u) {
-                        val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.personality)
+                        val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.nature)
                         Spacer(modifier = Modifier.height(8.dp))
                         Divider(color = Color.DarkGray)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1495,19 +1562,20 @@ fun TypeBadge(typeId: Int, modifier: Modifier = Modifier) {
         shape = RoundedCornerShape(4.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = typeEmoji,
-                fontSize = 10.sp,
+                fontSize = 8.sp,
                 modifier = Modifier.padding(end = 2.dp)
             )
             Text(
                 text = typeName,
-                fontSize = 9.sp,
+                fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1
             )
         }
     }

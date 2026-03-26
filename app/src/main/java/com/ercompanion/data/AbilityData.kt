@@ -42,8 +42,11 @@ object AbilityData {
     private const val THICK_FAT = 47
     private const val MARVEL_SCALE = 63
     private const val GUTS = 62
+    private const val SHED_SKIN = 61
     private const val COMPOUND_EYES = 14
     private const val MAGIC_GUARD = 98
+    private const val NO_GUARD = 99
+    private const val CLEAR_BODY = 29
 
     private val ABILITY_EFFECTS = mapOf(
         // Starter abilities (1.5x at low HP)
@@ -153,6 +156,11 @@ object AbilityData {
             name = "Guts",
             description = "+50% Attack when statused"
         ),
+        SHED_SKIN to AbilityEffect(
+            id = SHED_SKIN,
+            name = "Shed Skin",
+            description = "33% chance to cure status each turn"
+        ),
         MAGIC_GUARD to AbilityEffect(
             id = MAGIC_GUARD,
             name = "Magic Guard",
@@ -174,6 +182,16 @@ object AbilityData {
             id = COMPOUND_EYES,
             name = "Compound Eyes",
             description = "+30% move accuracy"
+        ),
+        NO_GUARD to AbilityEffect(
+            id = NO_GUARD,
+            name = "No Guard",
+            description = "All moves always hit"
+        ),
+        CLEAR_BODY to AbilityEffect(
+            id = CLEAR_BODY,
+            name = "Clear Body",
+            description = "Prevents stat reduction"
         )
     )
 
@@ -182,7 +200,12 @@ object AbilityData {
     }
 
     fun getAbilityName(abilityId: Int): String {
-        return ABILITY_EFFECTS[abilityId]?.name ?: "Unknown Ability #$abilityId"
+        // First try to get from effects (includes description)
+        val effect = ABILITY_EFFECTS[abilityId]
+        if (effect != null) return effect.name
+
+        // Fall back to name-only lookup
+        return AbilityNames.getName(abilityId)
     }
 
     /**

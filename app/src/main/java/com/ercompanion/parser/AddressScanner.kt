@@ -35,19 +35,30 @@ class AddressScanner(
     }
 
     suspend fun findPartyAddress(): Pair<Long, Long>? = withContext(Dispatchers.IO) {
+        // Check if we already have cached addresses
+        val cachedCountAddr = prefs.getLong(KEY_PARTY_COUNT_ADDRESS, 0L)
+        val cachedPartyAddr = prefs.getLong(KEY_PARTY_ADDRESS, 0L)
+
+        if (cachedCountAddr != 0L && cachedPartyAddr != 0L) {
+            // Use cached addresses without verification (they're fixed in ER)
+            return@withContext Pair(cachedCountAddr, cachedPartyAddr)
+        }
+
         // Emerald Rogue uses fixed addresses: gPlayerParty at 0x02037780
         // gPlayerPartyCount at 0x0203777C is unreliable (can be 0), so we ignore it.
         val partyCountAddr = 0x0203777CL
         val partyAddr = 0x02037780L
 
-        // Verify the address has valid data
+        // Verify the address has valid data (only on first run)
         if (verifyPartyAddress(partyCountAddr, partyAddr)) {
             saveAddresses(partyCountAddr, partyAddr)
             return@withContext Pair(partyCountAddr, partyAddr)
         }
 
-        // If verification failed, something is very wrong
-        null
+        // If verification failed, still try to use the known addresses
+        // (verification might fail during battles, but addresses are fixed)
+        saveAddresses(partyCountAddr, partyAddr)
+        return@withContext Pair(partyCountAddr, partyAddr)
     }
 
     private suspend fun verifyPartyAddress(countAddr: Long, partyAddr: Long): Boolean {
