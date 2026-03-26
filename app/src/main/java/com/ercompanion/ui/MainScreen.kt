@@ -29,6 +29,7 @@ import com.ercompanion.data.MoveData
 import com.ercompanion.data.PokemonData
 import com.ercompanion.network.RetroArchClient
 import com.ercompanion.parser.PartyMon
+import com.ercompanion.ui.components.CurseSelector
 import com.ercompanion.ui.components.TypeBadge
 import com.ercompanion.ui.theme.HPGreen
 import com.ercompanion.ui.theme.HPRed
@@ -52,7 +53,7 @@ fun MainScreen(
     // Toggle between compact and classic layout
     // Set to true for ultra-compact mode (recommended for small screens)
     // Set to false for classic detailed mode
-    val useCompactLayout = true
+    val useCompactLayout = false
 
     // Use compact layout directly
     if (useCompactLayout) {
@@ -74,8 +75,11 @@ fun MainScreen(
     // Classic layout below (original implementation)
     val scrollState = androidx.compose.foundation.rememberScrollState()
     var showDebug by remember { mutableStateOf(false) }
+    var showCurseDialog by remember { mutableStateOf(false) }
+    val activeCurses = viewModel.curseState.collectAsState().value
 
-    Column(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
@@ -326,6 +330,60 @@ fun MainScreen(
                     }
                 }
             }
+        }
+    }
+
+        // Curse settings button (bottom-right corner) - only show in battle
+        val enemyLead2 = enemyPartyState.firstOrNull()
+        val inBattle2 = enemyLead2 != null
+        if (inBattle2) {
+            FloatingActionButton(
+                onClick = { showCurseDialog = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                containerColor = if (activeCurses.totalCurses() > 0)
+                    MaterialTheme.colorScheme.error
+                else
+                    MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "⚠",
+                        fontSize = 20.sp
+                    )
+                    if (activeCurses.totalCurses() > 0) {
+                        Text(
+                            text = activeCurses.totalCurses().toString(),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+
+        // Curse dialog
+        if (showCurseDialog) {
+            AlertDialog(
+                onDismissRequest = { showCurseDialog = false },
+                title = { Text("Curse Configuration") },
+                text = {
+                    CurseSelector(
+                        curses = activeCurses,
+                        onCursesChanged = { viewModel.updateCurses(it) }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showCurseDialog = false }) {
+                        Text("Done")
+                    }
+                }
+            )
         }
     }
 }
