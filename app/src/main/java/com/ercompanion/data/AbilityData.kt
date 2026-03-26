@@ -1,5 +1,7 @@
 package com.ercompanion.data
 
+import com.ercompanion.data.Types
+
 /**
  * Pokemon ability effects for damage calculation
  *
@@ -39,6 +41,8 @@ object AbilityData {
     private const val WATER_ABSORB = 11
     private const val MOTOR_DRIVE = 78
     private const val SAP_SIPPER = 157
+    private const val LIGHTNING_ROD = 31
+    private const val STORM_DRAIN = 114
     private const val THICK_FAT = 47
     private const val MARVEL_SCALE = 63
     private const val GUTS = 62
@@ -75,38 +79,50 @@ object AbilityData {
         LEVITATE to AbilityEffect(
             id = LEVITATE,
             name = "Levitate",
-            typeImmunities = listOf(4),  // Ground
+            typeImmunities = listOf(Types.GROUND),
             description = "Immune to Ground"
         ),
         FLASH_FIRE to AbilityEffect(
             id = FLASH_FIRE,
             name = "Flash Fire",
-            typeImmunities = listOf(9),  // Fire
+            typeImmunities = listOf(Types.FIRE),
             description = "Immune to Fire, +50% Fire dmg when activated"
         ),
         VOLT_ABSORB to AbilityEffect(
             id = VOLT_ABSORB,
             name = "Volt Absorb",
-            typeImmunities = listOf(12),  // Electric
+            typeImmunities = listOf(Types.ELECTRIC),
             description = "Immune to Electric, heals 25%"
         ),
         WATER_ABSORB to AbilityEffect(
             id = WATER_ABSORB,
             name = "Water Absorb",
-            typeImmunities = listOf(10),  // Water
+            typeImmunities = listOf(Types.WATER),
             description = "Immune to Water, heals 25%"
         ),
         MOTOR_DRIVE to AbilityEffect(
             id = MOTOR_DRIVE,
             name = "Motor Drive",
-            typeImmunities = listOf(12),  // Electric
+            typeImmunities = listOf(Types.ELECTRIC),
             description = "Immune to Electric, +1 Speed"
         ),
         SAP_SIPPER to AbilityEffect(
             id = SAP_SIPPER,
             name = "Sap Sipper",
-            typeImmunities = listOf(11),  // Grass
+            typeImmunities = listOf(Types.GRASS),
             description = "Immune to Grass, +1 Attack"
+        ),
+        LIGHTNING_ROD to AbilityEffect(
+            id = LIGHTNING_ROD,
+            name = "LightningRod",
+            typeImmunities = listOf(Types.ELECTRIC),
+            description = "Immune to Electric, +1 Sp.Atk"
+        ),
+        STORM_DRAIN to AbilityEffect(
+            id = STORM_DRAIN,
+            name = "Storm Drain",
+            typeImmunities = listOf(Types.WATER),
+            description = "Immune to Water, +1 Sp.Atk"
         ),
 
         // Damage modifiers
@@ -252,10 +268,10 @@ object AbilityData {
         // Pinch abilities (Overgrow, Blaze, Torrent, Swarm)
         if (currentHp > 0 && maxHp > 0 && (currentHp.toFloat() / maxHp) <= 0.33f) {
             when (abilityId) {
-                OVERGROW -> if (moveType == 11) multiplier *= 1.5f  // Grass
-                BLAZE -> if (moveType == 9) multiplier *= 1.5f  // Fire
-                TORRENT -> if (moveType == 10) multiplier *= 1.5f  // Water
-                SWARM -> if (moveType == 6) multiplier *= 1.5f  // Bug
+                OVERGROW -> if (moveType == Types.GRASS) multiplier *= 1.5f
+                BLAZE -> if (moveType == Types.FIRE) multiplier *= 1.5f
+                TORRENT -> if (moveType == Types.WATER) multiplier *= 1.5f
+                SWARM -> if (moveType == Types.BUG) multiplier *= 1.5f
             }
         }
 
@@ -275,7 +291,7 @@ object AbilityData {
      * (Thick Fat halves Fire/Ice damage)
      */
     fun getDefensiveMultiplier(abilityId: Int, moveType: Int): Float {
-        if (abilityId == THICK_FAT && (moveType == 9 || moveType == 14)) {
+        if (abilityId == THICK_FAT && (moveType == Types.FIRE || moveType == Types.ICE)) {
             return 0.5f  // Fire or Ice
         }
         return 1.0f
