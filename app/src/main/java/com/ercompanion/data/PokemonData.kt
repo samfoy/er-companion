@@ -8,7 +8,9 @@ data class MoveData(
     val highCritRatio: Boolean = false, // Moves like Slash, Crabhammer (+1 crit stage)
     val alwaysCrits: Boolean = false, // Moves like Frost Breath, Storm Throw (always crit)
     val multiHitMin: Int = 1, // Minimum hits (1 for normal moves, 2+ for multi-hit)
-    val multiHitMax: Int = 1  // Maximum hits (1 for normal moves, 2-5 for multi-hit)
+    val multiHitMax: Int = 1, // Maximum hits (1 for normal moves, 2-5 for multi-hit)
+    val recoilPercent: Float = 0f, // Recoil as fraction of damage dealt (0.25, 0.33, 0.5)
+    val crashDamage: Boolean = false // Jump Kick/High Jump Kick: 50% max HP on miss
 )
 
 object PokemonData {

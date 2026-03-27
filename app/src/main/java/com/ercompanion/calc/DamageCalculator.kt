@@ -20,7 +20,8 @@ data class DamageResult(
     val isCrit: Boolean = false,  // true if this was a critical hit
     val hitCount: Int = 1,        // Number of hits (1 for normal moves, 2-5 for multi-hit)
     val hitCountMin: Int = 1,     // Minimum hits for multi-hit moves
-    val hitCountMax: Int = 1      // Maximum hits for multi-hit moves
+    val hitCountMax: Int = 1,     // Maximum hits for multi-hit moves
+    val recoilDamage: Int = 0     // Recoil damage taken by attacker (0 if no recoil)
 )
 
 /**
@@ -161,7 +162,8 @@ object DamageCalculator {
                 isCrit = false,
                 hitCount = 1,
                 hitCountMin = 1,
-                hitCountMax = 1
+                hitCountMax = 1,
+                recoilDamage = 0
             )
         }
 
@@ -181,7 +183,8 @@ object DamageCalculator {
                 isCrit = false,
                 hitCount = 1,
                 hitCountMin = 1,
-                hitCountMax = 1
+                hitCountMax = 1,
+                recoilDamage = 0
             )
         }
 
@@ -214,7 +217,8 @@ object DamageCalculator {
                 isCrit = false,
                 hitCount = 1,
                 hitCountMin = 1,
-                hitCountMax = 1
+                hitCountMax = 1,
+                recoilDamage = 0
             )
         }
 
@@ -233,7 +237,8 @@ object DamageCalculator {
                 isCrit = false,
                 hitCount = 1,
                 hitCountMin = 1,
-                hitCountMax = 1
+                hitCountMax = 1,
+                recoilDamage = 0
             )
         }
 
@@ -564,6 +569,14 @@ object DamageCalculator {
             }
         }
 
+        // ----- RECOIL DAMAGE -----
+
+        var recoilDamage = 0
+        if (actualMoveData.recoilPercent > 0f && !com.ercompanion.data.AbilityData.blocksRecoil(attackerAbility)) {
+            // Calculate recoil as percentage of damage dealt (use max damage for calculation)
+            recoilDamage = (maxDamage * actualMoveData.recoilPercent).toInt().coerceAtLeast(1)
+        }
+
         // Add multi-hit indicator to label
         if (hitCountMin > 1 || hitCountMax > 1) {
             val hitLabel = if (hitCountMin == hitCountMax) {
@@ -575,6 +588,15 @@ object DamageCalculator {
                 "$effectLabel $hitLabel"
             } else {
                 hitLabel
+            }
+        }
+
+        // Add recoil indicator to label
+        if (recoilDamage > 0) {
+            effectLabel = if (effectLabel.isNotEmpty()) {
+                "$effectLabel (${recoilDamage} recoil)"
+            } else {
+                "${recoilDamage} recoil"
             }
         }
 
@@ -591,7 +613,8 @@ object DamageCalculator {
             isCrit = isCrit,
             hitCount = if (hitCountMin == hitCountMax) hitCountMax else (hitCountMin + hitCountMax) / 2,
             hitCountMin = hitCountMin,
-            hitCountMax = hitCountMax
+            hitCountMax = hitCountMax,
+            recoilDamage = recoilDamage
         )
     }
 
@@ -772,5 +795,83 @@ object DamageCalculator {
 
         // Roll for crit (using random for now, could be deterministic for AI)
         return kotlin.random.Random.nextFloat() < critChance
+    }
+
+    /**
+     * Calculate confusion self-hit damage.
+     *
+     * Confusion mechanics (Gen 7+):
+     * - Lasts 1-4 turns (random)
+     * - 33% chance to hurt self each turn
+     * - Self-hit damage: 40 base power, typeless, physical
+     * - Uses attacker's Attack vs attacker's Defense
+     * - No STAB, no type effectiveness, no other modifiers
+     *
+     * @param attackerLevel Pokemon's level
+     * @param attackerAttack Pokemon's Attack stat (post-stat-stages)
+     * @param attackerDefense Pokemon's Defense stat (post-stat-stages)
+     * @param attackerMaxHp Pokemon's max HP (for percentage calculation)
+     * @return DamageResult for confusion self-hit
+     */
+    fun calculateConfusionDamage(
+        attackerLevel: Int,
+        attackerAttack: Int,
+        attackerDefense: Int,
+        attackerMaxHp: Int
+    ): DamageResult {
+        // Confusion self-hit: 40 base power, typeless, physical
+        val basePower = 40
+
+        // Gen 3 formula: (((2×Level÷5+2)×Power×Atk÷Def÷50)+2)
+        val levelMod = (2 * attackerLevel / 5 + 2)
+        val safeDefense = attackerDefense.coerceAtLeast(1)
+
+        var damage = (basePower.toLong() * attackerAttack * levelMod / safeDefense / 50).toInt()
+        damage += 2  // Add +2 constant from Gen 3 formula
+
+        // Random factor: 85-100%
+        val minDamage = (damage * 0.85f).toInt().coerceIn(1, MAX_DAMAGE)
+        val maxDamage = damage.coerceIn(1, MAX_DAMAGE)
+
+        // Calculate percentages
+        val percentMin = if (attackerMaxHp > 0) (minDamage * 100 / attackerMaxHp) else 0
+        val percentMax = if (attackerMaxHp > 0) (maxDamage * 100 / attackerMaxHp) else 0
+
+        return DamageResult(
+            moveName = "Confusion",
+            minDamage = minDamage,
+            maxDamage = maxDamage,
+            effectiveness = 1.0f,  // Typeless
+            effectLabel = "Hit self in confusion!",
+            percentMin = percentMin,
+            percentMax = percentMax,
+            isStab = false,
+            wouldKO = false,  // Confusion never KOs
+            isValid = true,
+            isCrit = false,  // Confusion can't crit
+            hitCount = 1,
+            hitCountMin = 1,
+            hitCountMax = 1,
+            recoilDamage = 0
+        )
+    }
+
+    /**
+     * Check if Pokemon should hit itself in confusion.
+     * 33% chance each turn while confused (Gen 7+).
+     *
+     * @return true if Pokemon hits itself
+     */
+    fun shouldConfusionHit(): Boolean {
+        return kotlin.random.Random.nextFloat() < 0.33f
+    }
+
+    /**
+     * Generate confusion duration (1-4 turns, Gen 7+).
+     *
+     * @return Number of turns confusion will last
+     */
+    fun generateConfusionDuration(): Int {
+        return kotlin.random.Random.nextInt(1, 5)  // 1-4 turns
     }
 }

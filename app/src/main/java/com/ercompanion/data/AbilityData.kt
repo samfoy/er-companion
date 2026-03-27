@@ -61,6 +61,13 @@ object AbilityData {
     // Multi-hit ability
     private const val SKILL_LINK = 92
 
+    // Recoil-blocking abilities
+    private const val ROCK_HEAD = 69
+
+    // Confusion-related abilities
+    private const val OWN_TEMPO = 20
+    private const val TANGLED_FEET = 77
+
     private val ABILITY_EFFECTS = mapOf(
         // Starter abilities (1.5x at low HP)
         OVERGROW to AbilityEffect(
@@ -244,6 +251,25 @@ object AbilityData {
             id = SKILL_LINK,
             name = "Skill Link",
             description = "Multi-hit moves always hit 5 times"
+        ),
+
+        // Recoil-blocking abilities
+        ROCK_HEAD to AbilityEffect(
+            id = ROCK_HEAD,
+            name = "Rock Head",
+            description = "No recoil damage from moves"
+        ),
+
+        // Confusion-related abilities
+        OWN_TEMPO to AbilityEffect(
+            id = OWN_TEMPO,
+            name = "Own Tempo",
+            description = "Immune to confusion"
+        ),
+        TANGLED_FEET to AbilityEffect(
+            id = TANGLED_FEET,
+            name = "Tangled Feet",
+            description = "+Evasion while confused"
         )
     )
 
@@ -368,5 +394,30 @@ object AbilityData {
      */
     fun forcesMaxHits(abilityId: Int): Boolean {
         return abilityId == SKILL_LINK
+    }
+
+    /**
+     * Check if ability blocks recoil damage.
+     * Rock Head: No recoil damage from recoil moves
+     * Magic Guard: No indirect damage (recoil, weather, status, etc.)
+     */
+    fun blocksRecoil(abilityId: Int): Boolean {
+        return abilityId == ROCK_HEAD || abilityId == MAGIC_GUARD
+    }
+
+    /**
+     * Check if ability grants immunity to confusion.
+     * Own Tempo: Cannot be confused
+     */
+    fun immuneToConfusion(abilityId: Int): Boolean {
+        return abilityId == OWN_TEMPO
+    }
+
+    /**
+     * Check if ability boosts evasion while confused.
+     * Tangled Feet: +1 evasion stage while confused
+     */
+    fun hasConfusionEvasionBoost(abilityId: Int): Boolean {
+        return abilityId == TANGLED_FEET
     }
 }

@@ -22,7 +22,8 @@ data class BattlerState(
     val currentHp: Int,
     val statStages: StatStages,
     val status: Int = 0,
-    val tempBoosts: TempBoosts = TempBoosts()
+    val tempBoosts: TempBoosts = TempBoosts(),
+    val confusionTurns: Int = 0  // Remaining turns of confusion (0 = not confused, 1-4 = confused)
 )
 
 /**
