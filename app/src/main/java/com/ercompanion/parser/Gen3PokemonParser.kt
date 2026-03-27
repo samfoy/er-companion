@@ -173,6 +173,7 @@ object Gen3PokemonParser {
 
         // Validate — ER has up to 1526 species
         if (species == 0 || species > 1526) {
+            android.util.Log.w("Gen3Parser", "Rejected species=$species (out of range 1-1526) personality=0x${personality.toString(16)}")
             return null
         }
 
