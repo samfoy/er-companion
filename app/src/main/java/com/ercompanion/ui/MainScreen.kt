@@ -92,75 +92,92 @@ fun MainScreen(
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // ── HEADER: compact in out-of-battle, full in battle ──────────────────────
+        // ── HEADER: compact single-row layout ──────────────────────
         if (inBattle) {
-            // Full header with title and connection status
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Left: Title + debug tap
                 Text(
-                    text = "ER Companion",
-                    style = MaterialTheme.typography.titleLarge,
+                    text = "ER",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.clickable { showDebug = !showDebug }
                 )
 
-                Column(horizontalAlignment = Alignment.End) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when (connectionState) {
-                                        RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
-                                        RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
-                                        RetroArchClient.ConnectionStatus.ERROR -> HPRed
-                                    }
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = when (connectionState) {
-                                RetroArchClient.ConnectionStatus.CONNECTED -> "Connected"
-                                RetroArchClient.ConnectionStatus.DISCONNECTED -> "Disconnected"
-                                RetroArchClient.ConnectionStatus.ERROR -> "Error"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        TextButton(
-                            onClick = onRescan,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text("↺ Rescan", fontSize = 12.sp, color = Color(0xFF888888))
-                        }
-                    }
+                // Right: Status + Data Source + Rescan + Curses
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Connection status dot
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (connectionState) {
+                                    RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
+                                    RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
+                                    RetroArchClient.ConnectionStatus.ERROR -> HPRed
+                                }
+                            )
+                    )
+
                     // Data source indicator
                     if (connectionState == RetroArchClient.ConnectionStatus.CONNECTED) {
                         Text(
                             text = when (dataSource) {
-                                MainViewModel.DataSource.UDP -> "UDP LIVE"
-                                MainViewModel.DataSource.SAVE_STATE -> "SAVE STATE"
+                                MainViewModel.DataSource.UDP -> "LIVE"
+                                MainViewModel.DataSource.SAVE_STATE -> "SAVE"
                                 MainViewModel.DataSource.DISCONNECTED -> ""
                             },
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = when (dataSource) {
                                 MainViewModel.DataSource.UDP -> Color(0xFF4CAF50)
                                 MainViewModel.DataSource.SAVE_STATE -> Color(0xFFFF9800)
                                 MainViewModel.DataSource.DISCONNECTED -> Color.Gray
-                            },
-                            modifier = Modifier.padding(top = 2.dp)
+                            }
+                        )
+                    }
+
+                    // Rescan button
+                    TextButton(
+                        onClick = onRescan,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.height(24.dp)
+                    ) {
+                        Text("↺", fontSize = 14.sp, color = Color(0xFF888888))
+                    }
+
+                    // Curse button
+                    TextButton(
+                        onClick = { showCurseDialog = true },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.height(24.dp),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = if (activeCurses.totalCurses() > 0)
+                                MaterialTheme.colorScheme.error
+                            else
+                                Color(0xFF888888)
+                        )
+                    ) {
+                        Text(
+                            text = if (activeCurses.totalCurses() > 0)
+                                "⚠${activeCurses.totalCurses()}"
+                            else
+                                "⚠",
+                            fontSize = 14.sp
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Debug info (hidden by default, tap title to show)
             if (showDebug && errorMessage != null) {
@@ -437,39 +454,7 @@ fun MainScreen(
         }
     }
 
-        // Curse settings button (bottom-right, offset to avoid optimal lines) - only show in battle
-        val enemyLead2 = enemyPartyState.firstOrNull()
-        val inBattle2 = enemyLead2 != null
-        if (inBattle2) {
-            FloatingActionButton(
-                onClick = { showCurseDialog = true },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 180.dp),  // Large bottom offset to avoid optimal lines
-                containerColor = if (activeCurses.totalCurses() > 0)
-                    MaterialTheme.colorScheme.error
-                else
-                    MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "⚠",
-                        fontSize = 20.sp
-                    )
-                    if (activeCurses.totalCurses() > 0) {
-                        Text(
-                            text = activeCurses.totalCurses().toString(),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-        }
+        // Curse button is now in the header (removed floating action button)
 
         // Curse dialog
         if (showCurseDialog) {
