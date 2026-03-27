@@ -78,6 +78,9 @@ fun MainScreen(
     var showCurseDialog by remember { mutableStateOf(false) }
     val activeCurses = viewModel.curseState.collectAsState().value
 
+    val enemyLead = enemyPartyState.firstOrNull()
+    val inBattle = enemyLead != null
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
         modifier = Modifier
@@ -86,118 +89,168 @@ fun MainScreen(
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // Header with connection status
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "ER Companion",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.clickable { showDebug = !showDebug }
-            )
+        // ── HEADER: compact in out-of-battle, full in battle ──────────────────────
+        if (inBattle) {
+            // Full header with title and connection status
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ER Companion",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.clickable { showDebug = !showDebug }
+                )
 
-            Column(horizontalAlignment = Alignment.End) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when (connectionState) {
-                                    RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
-                                    RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
-                                    RetroArchClient.ConnectionStatus.ERROR -> HPRed
-                                }
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = when (connectionState) {
-                            RetroArchClient.ConnectionStatus.CONNECTED -> "Connected"
-                            RetroArchClient.ConnectionStatus.DISCONNECTED -> "Disconnected"
-                            RetroArchClient.ConnectionStatus.ERROR -> "Error"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    TextButton(
-                        onClick = onRescan,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("↺ Rescan", fontSize = 12.sp, color = Color(0xFF888888))
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when (connectionState) {
+                                        RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
+                                        RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
+                                        RetroArchClient.ConnectionStatus.ERROR -> HPRed
+                                    }
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when (connectionState) {
+                                RetroArchClient.ConnectionStatus.CONNECTED -> "Connected"
+                                RetroArchClient.ConnectionStatus.DISCONNECTED -> "Disconnected"
+                                RetroArchClient.ConnectionStatus.ERROR -> "Error"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        TextButton(
+                            onClick = onRescan,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("↺ Rescan", fontSize = 12.sp, color = Color(0xFF888888))
+                        }
+                    }
+                    // Data source indicator
+                    if (connectionState == RetroArchClient.ConnectionStatus.CONNECTED) {
+                        Text(
+                            text = when (dataSource) {
+                                MainViewModel.DataSource.UDP -> "UDP LIVE"
+                                MainViewModel.DataSource.SAVE_STATE -> "SAVE STATE"
+                                MainViewModel.DataSource.DISCONNECTED -> ""
+                            },
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when (dataSource) {
+                                MainViewModel.DataSource.UDP -> Color(0xFF4CAF50)
+                                MainViewModel.DataSource.SAVE_STATE -> Color(0xFFFF9800)
+                                MainViewModel.DataSource.DISCONNECTED -> Color.Gray
+                            },
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
                 }
-                // Data source indicator
-                if (connectionState == RetroArchClient.ConnectionStatus.CONNECTED) {
-                    Text(
-                        text = when (dataSource) {
-                            MainViewModel.DataSource.UDP -> "UDP LIVE"
-                            MainViewModel.DataSource.SAVE_STATE -> "SAVE STATE"
-                            MainViewModel.DataSource.DISCONNECTED -> ""
-                        },
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = when (dataSource) {
-                            MainViewModel.DataSource.UDP -> Color(0xFF4CAF50)
-                            MainViewModel.DataSource.SAVE_STATE -> Color(0xFFFF9800)
-                            MainViewModel.DataSource.DISCONNECTED -> Color.Gray
-                        },
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Debug info (hidden by default, tap title to show)
-        if (showDebug && errorMessage != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = errorMessage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
+            // Debug info (hidden by default, tap title to show)
+            if (showDebug && errorMessage != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
                     )
-                    if (!scanningState) {
-                        TextButton(onClick = onRescan) {
-                            Text("Rescan")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = errorMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (!scanningState) {
+                            TextButton(onClick = onRescan) {
+                                Text("Rescan")
+                            }
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // Debug panel (only show in battle)
+            DebugPanel(
+                debugLog = debugLog,
+                currentManualPath = viewModel.debugManualPath,
+                saveStateStatus = viewModel.getSaveStateStatus(),
+                searchPaths = viewModel.getSaveStateSearchPaths(),
+                onApply = { path -> viewModel.applySaveStatePath(path) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+        } else {
+            // Compact header for out-of-battle: just connection status and rescan
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when (connectionState) {
+                                RetroArchClient.ConnectionStatus.CONNECTED -> HPGreen
+                                RetroArchClient.ConnectionStatus.DISCONNECTED -> Color.Gray
+                                RetroArchClient.ConnectionStatus.ERROR -> HPRed
+                            }
+                        )
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                TextButton(
+                    onClick = onRescan,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("↺", fontSize = 14.sp, color = Color(0xFF888888))
+                }
+                // Debug icon button (collapsed)
+                TextButton(
+                    onClick = { showDebug = !showDebug },
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("🔧", fontSize = 12.sp)
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
+
+            // Debug panel (collapsed, only if user toggled it)
+            if (showDebug) {
+                DebugPanel(
+                    debugLog = debugLog,
+                    currentManualPath = viewModel.debugManualPath,
+                    saveStateStatus = viewModel.getSaveStateStatus(),
+                    searchPaths = viewModel.getSaveStateSearchPaths(),
+                    onApply = { path -> viewModel.applySaveStatePath(path) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
 
-        // Debug panel
-        DebugPanel(
-            debugLog = debugLog,
-            currentManualPath = viewModel.debugManualPath,
-            saveStateStatus = viewModel.getSaveStateStatus(),
-            searchPaths = viewModel.getSaveStateSearchPaths(),
-            onApply = { path -> viewModel.applySaveStatePath(path) }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val enemyLead = enemyPartyState.firstOrNull()
-        val inBattle = enemyLead != null
+        // Track expanded mon in out-of-battle view
+        var expandedOutOfBattleIndex by remember { mutableStateOf<Int?>(null) }
 
         if (partyState.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -322,19 +375,59 @@ fun MainScreen(
                 viewModel = viewModel
             )
         } else {
-            // ── OUT-OF-BATTLE LAYOUT: single column, builds collapsed ──────────────
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                partyState.forEachIndexed { index, mon ->
-                    if (mon != null) {
-                        PokemonCard(
-                            viewModel = viewModel,
-                            mon = mon,
-                            slotNumber = index + 1,
-                            enemyTarget = null,
-                            isActive = false,
-                            showAiPrediction = false,
-                            defaultExpanded = false
-                        )
+            // ── OUT-OF-BATTLE LAYOUT: 2-column grid, all 6 mons visible ──────────────
+            if (expandedOutOfBattleIndex != null) {
+                // Show expanded view for single mon
+                val mon = partyState.getOrNull(expandedOutOfBattleIndex!!)
+                if (mon != null) {
+                    PokemonCard(
+                        viewModel = viewModel,
+                        mon = mon,
+                        slotNumber = expandedOutOfBattleIndex!! + 1,
+                        enemyTarget = null,
+                        isActive = false,
+                        showAiPrediction = false,
+                        defaultExpanded = true,
+                        onHeaderClick = { expandedOutOfBattleIndex = null }
+                    )
+                }
+            } else {
+                // 2-column grid
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Left column: slots 0, 2, 4
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(0, 2, 4).forEach { index ->
+                            val mon = partyState.getOrNull(index)
+                            if (mon != null) {
+                                CompactPartyMonCard(
+                                    mon = mon,
+                                    slotNumber = index + 1,
+                                    onClick = { expandedOutOfBattleIndex = index }
+                                )
+                            }
+                        }
+                    }
+                    // Right column: slots 1, 3, 5
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(1, 3, 5).forEach { index ->
+                            val mon = partyState.getOrNull(index)
+                            if (mon != null) {
+                                CompactPartyMonCard(
+                                    mon = mon,
+                                    slotNumber = index + 1,
+                                    onClick = { expandedOutOfBattleIndex = index }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -525,6 +618,157 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Compact card for out-of-battle party grid — shows sprite, name, level, types, HP bar, nature, ability */
+@Composable
+fun CompactPartyMonCard(mon: PartyMon, slotNumber: Int, onClick: () -> Unit) {
+    val speciesName = PokemonData.getSpeciesName(mon.species)
+    val types = PokemonData.getSpeciesTypes(mon.species)
+    val hpFrac = if (mon.maxHp > 0) mon.hp.toFloat() / mon.maxHp else 0f
+    val hpColor = when {
+        hpFrac > 0.5f -> HPGreen
+        hpFrac > 0.2f -> HPYellow
+        else -> HPRed
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2A)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        ) {
+            // Header: sprite + name + level
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "#$slotNumber",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        fontSize = 9.sp,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    val ctx = LocalContext.current
+                    AsyncImage(
+                        model = ImageRequest.Builder(ctx)
+                            .data(SpriteUtils.getSpriteUrl(speciesName, mon.personality))
+                            .transformations(TopHalfCropTransformation())
+                            .build(),
+                        contentDescription = speciesName,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = speciesName,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
+                Text(
+                    text = "Lv${mon.level}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontSize = 11.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Type badges
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                types.forEach { typeId ->
+                    TypeBadge(typeId)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // HP bar + numbers
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${mon.hp}/${mon.maxHp}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontSize = 9.sp
+                )
+                // Status condition
+                if (mon.status > 0) {
+                    val statusCondition = com.ercompanion.data.StatusData.getStatusCondition(mon.status)
+                    if (statusCondition != null) {
+                        Text(
+                            text = statusCondition.name.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(statusCondition.color),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color.DarkGray)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(hpFrac.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(hpColor)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            // Nature + Ability (one line each, small text)
+            if (mon.personality > 0u) {
+                val nature = com.ercompanion.data.NatureData.getNatureFromPersonality(mon.nature)
+                if (!nature.isNeutral) {
+                    Text(
+                        text = "${nature.name} (+${nature.increasedStat} -${nature.decreasedStat})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFFF9800),
+                        fontSize = 8.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+            if (mon.ability > 0) {
+                val abilityName = com.ercompanion.data.AbilityData.getAbilityName(mon.ability)
+                Text(
+                    text = abilityName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9C27B0),
+                    fontSize = 8.sp,
+                    maxLines = 1
+                )
             }
         }
     }
