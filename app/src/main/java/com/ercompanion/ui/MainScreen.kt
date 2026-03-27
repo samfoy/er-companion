@@ -3,6 +3,8 @@ package com.ercompanion.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -2043,16 +2045,21 @@ fun OptimalLineDisplay(
     if (activeMon == null || enemyLead == null) return
 
     var expanded by remember { mutableStateOf(false) }
+    // 0=2-turn, 1=3-turn, 2=Monte Carlo (Deep)
+    var analysisMode by remember { mutableStateOf(0) }
+    var mcRunning by remember { mutableStateOf(false) }
     val activeCurses = viewModel.curseState.collectAsState().value
+    val coroutineScope = rememberCoroutineScope()
 
-    // Calculate optimal lines - cached by species and moves
-    val lines = remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses) {
+    // Standard lines (modes 0 and 1) — cached
+    val lines = remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses, analysisMode) {
+        if (analysisMode == 2) return@remember emptyList()
         try {
             com.ercompanion.calc.OptimalLineCalculator.calculateOptimalLines(
                 player = activeMon,
                 enemy = enemyLead,
-                maxDepth = 2,
-                topN = 3,
+                maxDepth = if (analysisMode == 1) 3 else 2,
+                topN = if (analysisMode == 1) 5 else 3,
                 isTrainer = true,
                 curses = activeCurses
             )
@@ -2060,6 +2067,10 @@ fun OptimalLineDisplay(
             emptyList()
         }
     }
+
+    // Monte Carlo report (mode 2) — runs async
+    var mcReport by remember { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
+    var mcProgress by remember { mutableStateOf("") }
 
     Card(
         modifier = Modifier
@@ -2069,7 +2080,7 @@ fun OptimalLineDisplay(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header - clickable to expand/collapse
+            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2079,11 +2090,7 @@ fun OptimalLineDisplay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "⚔",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 6.dp)
-                    )
+                    Text(text = "⚔", fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))
                     Text(
                         text = "OPTIMAL LINE",
                         style = MaterialTheme.typography.labelMedium,
@@ -2091,14 +2098,49 @@ fun OptimalLineDisplay(
                         color = Color(0xFFFFD700)
                     )
                 }
-                Text(
-                    text = if (expanded) "▲" else "▼",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Mode toggle: 2T / 3T / MC
+                    listOf("2T", "3T", "MC").forEachIndexed { idx, label ->
+                        Text(
+                            text = label,
+                            fontSize = 9.sp,
+                            fontWeight = if (analysisMode == idx) FontWeight.Bold else FontWeight.Normal,
+                            color = if (analysisMode == idx) Color(0xFFFFD700) else Color.Gray,
+                            modifier = Modifier
+                                .clickable {
+                                    analysisMode = idx
+                                    if (!expanded) expanded = true
+                                    if (idx == 2 && mcReport == null && !mcRunning) {
+                                        mcRunning = true
+                                        mcProgress = "Analyzing…"
+                                        coroutineScope.launch(Dispatchers.Default) {
+                                            try {
+                                                val result = com.ercompanion.calc.DeepAnalysisMode.performDeepAnalysis(
+                                                    player = activeMon,
+                                                    enemy = enemyLead,
+                                                    depth = com.ercompanion.calc.AnalysisDepth.DEEP,
+                                                    curses = activeCurses,
+                                                    onProgress = { msg -> mcProgress = msg }
+                                                )
+                                                mcReport = result
+                                            } catch (e: Exception) {
+                                                mcProgress = "Error: ${e.message}"
+                                            } finally {
+                                                mcRunning = false
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                        if (idx < 2) Text(text = "/", fontSize = 9.sp, color = Color(0xFF555555), modifier = Modifier.padding(horizontal = 1.dp))
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = if (expanded) "▲" else "▼", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
             }
 
-            // Expanded content
+                        // Expanded content
             AnimatedVisibility(visible = expanded) {
                 Column(
                     modifier = Modifier
@@ -2107,18 +2149,93 @@ fun OptimalLineDisplay(
                 ) {
                     Divider(color = Color(0xFF3A2A3A), modifier = Modifier.padding(bottom = 8.dp))
 
-                    if (lines.isEmpty()) {
-                        Text(
-                            text = "No optimal lines calculated",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
-                            fontSize = 11.sp
-                        )
+                    if (analysisMode == 2) {
+                        // Monte Carlo mode
+                        when {
+                            mcRunning -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color(0xFFFFD700)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = mcProgress, fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                            mcReport != null -> {
+                                val report = mcReport!!
+                                // Win rate
+                                report.monteCarloResult?.let { mc ->
+                                    val winPct = (mc.winRate * 100).toInt()
+                                    val lossRate = ((1f - mc.winRate) * 100).toInt()
+                                    val winColor = when {
+                                        winPct >= 70 -> Color(0xFF4CAF50)
+                                        winPct >= 40 -> Color(0xFFFFEB3B)
+                                        else -> Color(0xFFF44336)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(text = "Win rate", fontSize = 10.sp, color = Color.Gray)
+                                        Text(
+                                            text = "$winPct% win  /  $lossRate% loss",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = winColor
+                                        )
+                                    }
+                                    Text(
+                                        text = "Avg turns to KO: ${String.format("%.1f", (mc.avgTurnsToWin.toFloat()))}",
+                                        fontSize = 10.sp, color = Color.Gray,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                    Divider(color = Color(0xFF3A2A3A), modifier = Modifier.padding(vertical = 6.dp))
+                                }
+                                // Top lines from deep analysis
+                                report.optimalLines.take(5).forEachIndexed { index, line ->
+                                    OptimalLineItem(line = line, rank = index + 1, activeMon = activeMon)
+                                    if (index < minOf(4, report.optimalLines.size - 1)) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
+                                // Switch recommendations if any
+                                report.switchRecommendations?.takeIf { it.isNotEmpty() }?.let { switches ->
+                                    Divider(color = Color(0xFF3A2A3A), modifier = Modifier.padding(vertical = 6.dp))
+                                    Text(text = "⇄ Switch suggestions:", fontSize = 10.sp, color = Color(0xFF88AAFF), fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    switches.take(2).forEach { sw ->
+                                        val swName = com.ercompanion.data.PokemonData.getSpeciesName(sw.targetMon.species)
+                                        Text(
+                                            text = "→ $swName (score: ${String.format("%.1f", sw.score)})",
+                                            fontSize = 10.sp, color = Color.Gray
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Analysis took ${report.analysisTimeMs}ms",
+                                    fontSize = 8.sp, color = Color(0xFF444444),
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                            }
+                            else -> {
+                                Text(text = "Tap MC to run analysis", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
                     } else {
-                        lines.forEachIndexed { index, line ->
-                            OptimalLineItem(line = line, rank = index + 1, activeMon = activeMon)
-                            if (index < lines.size - 1) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                        // Standard 2T/3T lines
+                        if (lines.isEmpty()) {
+                            Text(
+                                text = "No optimal lines calculated",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                                fontSize = 11.sp
+                            )
+                        } else {
+                            lines.forEachIndexed { index, line ->
+                                OptimalLineItem(line = line, rank = index + 1, activeMon = activeMon)
+                                if (index < lines.size - 1) Spacer(modifier = Modifier.height(8.dp))
                             }
                         }
                     }
