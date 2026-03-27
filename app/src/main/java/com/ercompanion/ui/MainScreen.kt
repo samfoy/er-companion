@@ -313,6 +313,14 @@ fun MainScreen(
                     }
                 }
             }
+
+            // ── OPTIMAL LINE PREDICTION (below the two columns) ──────────────────────
+            Spacer(modifier = Modifier.height(8.dp))
+            OptimalLineDisplay(
+                activeMon = activeMon,
+                enemyLead = enemyLead,
+                viewModel = viewModel
+            )
         } else {
             // ── OUT-OF-BATTLE LAYOUT: single column, builds collapsed ──────────────
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1769,6 +1777,230 @@ fun KOIndicator(damagePercent: Int, currentHp: Int, maxHp: Int) {
                     color = Color(0xFFFF9800)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun OptimalLineDisplay(
+    activeMon: PartyMon?,
+    enemyLead: PartyMon?,
+    viewModel: MainViewModel
+) {
+    if (activeMon == null || enemyLead == null) return
+
+    var expanded by remember { mutableStateOf(false) }
+    val activeCurses = viewModel.curseState.collectAsState().value
+
+    // Calculate optimal lines - cached by species and moves
+    val lines = remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses) {
+        try {
+            com.ercompanion.calc.OptimalLineCalculator.calculateOptimalLines(
+                player = activeMon,
+                enemy = enemyLead,
+                maxDepth = 2,
+                topN = 3,
+                isTrainer = true,
+                curses = activeCurses
+            )
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2A)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header - clickable to expand/collapse
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "⚔",
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                    Text(
+                        text = "OPTIMAL LINE",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFD700)
+                    )
+                }
+                Text(
+                    text = if (expanded) "▲" else "▼",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+            }
+
+            // Expanded content
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Divider(color = Color(0xFF3A2A3A), modifier = Modifier.padding(bottom = 8.dp))
+
+                    if (lines.isEmpty()) {
+                        Text(
+                            text = "No optimal lines calculated",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            fontSize = 11.sp
+                        )
+                    } else {
+                        lines.forEachIndexed { index, line ->
+                            OptimalLineItem(line = line, rank = index + 1, activeMon = activeMon)
+                            if (index < lines.size - 1) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OptimalLineItem(line: com.ercompanion.calc.BattleLine, rank: Int, activeMon: PartyMon) {
+    // Color code by score
+    val scoreColor = when {
+        line.score >= 8f -> Color(0xFF4CAF50)  // Green
+        line.score >= 6f -> Color(0xFFFFEB3B)  // Yellow
+        else -> Color(0xFFFF9800)              // Orange/Red
+    }
+
+    // Risk indicator
+    val isRisky = line.survivalProbability < 0.4f
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = if (rank == 1) Color(0xFF2A1A2A) else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(8.dp)
+    ) {
+        // Move sequence
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (rank == 1) "▶" else " $rank",
+                    fontSize = 12.sp,
+                    fontWeight = if (rank == 1) FontWeight.Bold else FontWeight.Normal,
+                    color = if (rank == 1) Color(0xFFFFD700) else Color.Gray,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    // Move names
+                    val moveNames = line.moves.map { moveId ->
+                        PokemonData.getMoveName(moveId)
+                    }
+                    Text(
+                        text = moveNames.joinToString(" → "),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (rank == 1) FontWeight.Bold else FontWeight.Normal,
+                        color = if (rank == 1) Color.White else Color(0xFFCCCCCC),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            // Score
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isRisky) {
+                    Text(
+                        text = "⚠",
+                        fontSize = 11.sp,
+                        color = Color(0xFFFF6B6B),
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+                Text(
+                    text = "%.1f".format(line.score),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scoreColor,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = "/10",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontSize = 9.sp
+                )
+            }
+        }
+
+        // Details: turns to KO, survival
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Turns to KO
+            val koText = when {
+                line.turnsToKO == 1 -> "✓ OHKO"
+                line.turnsToKO == 2 -> "✓ 2HKO"
+                line.turnsToKO == 3 -> "✓ 3HKO"
+                line.turnsToKO > 0 -> "✓ ${line.turnsToKO}HKO"
+                else -> "No KO"
+            }
+            val koColor = when {
+                line.turnsToKO == 1 -> Color(0xFF4CAF50)
+                line.turnsToKO == 2 -> Color(0xFFFFEB3B)
+                line.turnsToKO > 0 -> Color(0xFFFF9800)
+                else -> Color.Gray
+            }
+
+            Text(
+                text = koText,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                color = koColor,
+                fontWeight = if (line.turnsToKO <= 2) FontWeight.Bold else FontWeight.Normal
+            )
+
+            // Survival probability
+            val survivalPercent = (line.survivalProbability * 100).toInt()
+            val survivalColor = when {
+                survivalPercent >= 70 -> Color(0xFF4CAF50)
+                survivalPercent >= 40 -> Color(0xFFFFEB3B)
+                else -> Color(0xFFFF6B6B)
+            }
+
+            Text(
+                text = "${survivalPercent}% surv",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                color = survivalColor,
+                fontWeight = if (isRisky) FontWeight.Bold else FontWeight.Normal
+            )
         }
     }
 }

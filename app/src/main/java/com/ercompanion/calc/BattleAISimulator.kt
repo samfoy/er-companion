@@ -82,6 +82,7 @@ object BattleAISimulator {
                         defenseStat = defStat,
                         movePower = moveData.power,
                         moveType = moveData.type,
+                        moveCategory = moveData.category,
                         attackerTypes = enemyTypes,
                         defenderTypes = targetTypes,
                         targetMaxHP = target.maxHp
