@@ -285,8 +285,10 @@ fun MainScreen(
             // Read active slots for doubles support
             val activePlayerSlots = viewModel.activePlayerSlots.collectAsState().value
             val effectiveActiveSlots = activePlayerSlots.ifEmpty {
-                if (activePlayerSlot >= 0) listOf(activePlayerSlot) else emptyList()
+                // If no active slots from memory, use activePlayerSlot or default to slot 0
+                if (activePlayerSlot >= 0) listOf(activePlayerSlot) else listOf(0)
             }
+
             val activeEnemySlots = viewModel.activeEnemySlots.collectAsState().value
             val activeMon = effectiveActiveSlots.firstOrNull()?.let { partyState.getOrNull(it) }
                             ?: partyState.firstOrNull { it != null }
@@ -1094,6 +1096,8 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 
 @Composable
 fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false, defaultExpanded: Boolean = false, onHeaderClick: (() -> Unit)? = null) {
+    val speciesName = PokemonData.getSpeciesName(mon.species)
+
     // Key on isActive so the card auto-expands when this mon becomes the active battler
     var expanded by remember(mon.species, isActive) { mutableStateOf(defaultExpanded || isActive) }
     var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
@@ -1104,8 +1108,6 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
             expanded = true
         }
     }
-
-    val speciesName = PokemonData.getSpeciesName(mon.species)
     val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
 
     Card(
@@ -1670,7 +1672,8 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
     val attackStat = if (moveData.category == 0) mon.attack else mon.spAttack
     val defenseStat = if (moveData.category == 0) enemyTarget.defense else enemyTarget.spDefense
 
-    val result = com.ercompanion.calc.DamageCalculator.calc(
+    // Calculate normal damage (no crit)
+    val normalResult = com.ercompanion.calc.DamageCalculator.calc(
         attackerLevel = mon.level,
         attackStat = attackStat,
         defenseStat = defenseStat,
@@ -1682,8 +1685,28 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
         targetMaxHP = enemyTarget.maxHp,
         isBurned = false,
         weather = Weather.NONE,
-        moveName = moveName
+        moveName = moveName,
+        allowCrits = false  // Force no crit for baseline
     )
+
+    // Calculate crit damage
+    val critResult = com.ercompanion.calc.DamageCalculator.calc(
+        attackerLevel = mon.level,
+        attackStat = attackStat,
+        defenseStat = defenseStat,
+        movePower = moveData.power,
+        moveType = moveData.type,
+        moveCategory = moveData.category,
+        attackerTypes = attackerTypes,
+        defenderTypes = defenderTypes,
+        targetMaxHP = enemyTarget.maxHp,
+        isBurned = false,
+        weather = Weather.NONE,
+        moveName = moveName,
+        forceCrit = true  // Force crit
+    )
+
+    val result = normalResult  // Use normal result for effectiveness color/validity
 
     // Check if result is invalid (pre-battle)
     if (!result.isValid) {
@@ -1722,10 +1745,19 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
         else -> MaterialTheme.colorScheme.onSurface
     }
 
-    val damageText = if (result.maxDamage > 0) {
-        "${result.minDamage}–${result.maxDamage} dmg (${result.percentMin}–${result.percentMax}%)"
+    val damageText = if (normalResult.maxDamage > 0) {
+        // Show both normal and crit ranges compactly
+        val normalRange = "${normalResult.minDamage}–${normalResult.maxDamage}"
+        val critRange = "${critResult.minDamage}–${critResult.maxDamage}"
+        "$normalRange | $critRange★"
     } else {
         "No damage"
+    }
+
+    val percentText = if (normalResult.maxDamage > 0) {
+        "${normalResult.percentMin}–${normalResult.percentMax}% | ${critResult.percentMin}–${critResult.percentMax}%★"
+    } else {
+        ""
     }
 
     Surface(
@@ -1761,10 +1793,23 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
                         color = effectColor,
                         fontWeight = if (result.effectiveness > 1f || isBestMove) FontWeight.Bold else FontWeight.Normal
                     )
-                    if (result.wouldKO) {
+                    if (normalResult.wouldKO) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(text = "KO!", fontSize = 10.sp, color = HPRed, fontWeight = FontWeight.Bold)
                     }
+                    if (critResult.wouldKO && !normalResult.wouldKO) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "KO★", fontSize = 10.sp, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+                    }
+                }
+                // Percent display
+                if (percentText.isNotEmpty()) {
+                    Text(
+                        text = percentText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 8.sp,
+                        color = Color(0xFF888888)
+                    )
                 }
                 // PP display
                 if (pp > 0) {
