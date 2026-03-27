@@ -1,16 +1,33 @@
 package com.ercompanion.data
 
+/**
+ * Fixed damage types for special damage calculation moves
+ */
+enum class FixedDamageType {
+    NONE,           // Normal damage calculation
+    LEVEL,          // Damage = user level (Seismic Toss, Night Shade)
+    FLAT,           // Fixed flat damage (Dragon Rage = 40, Sonic Boom = 20)
+    HALF_TARGET_HP, // Damage = 50% of target's current HP (Super Fang)
+    OHKO,           // One-hit KO moves (Fissure, Horn Drill, etc.)
+    PSYWAVE         // Random 0.5x to 1.5x user level
+}
+
 data class MoveData(
     val name: String,
     val power: Int,
     val type: Int,
     val category: Int, // 0=physical, 1=special, 2=status
+    val accuracy: Int = 100, // Accuracy (0-100), or -1 for moves that never miss
+    val priority: Int = 0,   // Priority bracket (-6 to +5, most moves are 0)
     val highCritRatio: Boolean = false, // Moves like Slash, Crabhammer (+1 crit stage)
     val alwaysCrits: Boolean = false, // Moves like Frost Breath, Storm Throw (always crit)
     val multiHitMin: Int = 1, // Minimum hits (1 for normal moves, 2+ for multi-hit)
     val multiHitMax: Int = 1, // Maximum hits (1 for normal moves, 2-5 for multi-hit)
     val recoilPercent: Float = 0f, // Recoil as fraction of damage dealt (0.25, 0.33, 0.5)
-    val crashDamage: Boolean = false // Jump Kick/High Jump Kick: 50% max HP on miss
+    val crashDamage: Boolean = false, // Jump Kick/High Jump Kick: 50% max HP on miss
+    val fixedDamageType: FixedDamageType = FixedDamageType.NONE, // Special damage calculation
+    val fixedDamageAmount: Int = 0, // Used for FLAT type (Dragon Rage = 40, Sonic Boom = 20)
+    val alwaysHits: Boolean = false // Moves that bypass accuracy checks (Aerial Ace, Aura Sphere)
 )
 
 object PokemonData {
@@ -2223,7 +2240,7 @@ object PokemonData {
             29 to MoveData("Headbutt", 70, 0, 2),
             30 to MoveData("Horn Attack", 65, 0, 2),
             31 to MoveData("Fury Attack", 15, 0, 2),
-            32 to MoveData("Horn Drill", 1, 0, 2),
+            32 to MoveData("Horn Drill", 1, 0, 0, accuracy = 30, fixedDamageType = FixedDamageType.OHKO),
             33 to MoveData("Tackle", 40, 0, 2),
             34 to MoveData("Body Slam", 85, 0, 2),
             35 to MoveData("Wrap", 15, 0, 2),
@@ -2260,7 +2277,7 @@ object PokemonData {
             66 to MoveData("Submission", 80, 1, 2),
             67 to MoveData("Low Kick", 1, 1, 2),
             68 to MoveData("Counter", 1, 1, 2),
-            69 to MoveData("Seismic Toss", 1, 1, 2),
+            69 to MoveData("Seismic Toss", 1, 1, 0, fixedDamageType = FixedDamageType.LEVEL),
             70 to MoveData("Strength", 80, 0, 2),
             71 to MoveData("Absorb", 20, 11, 2),
             72 to MoveData("Mega Drain", 40, 11, 2),
@@ -2273,7 +2290,7 @@ object PokemonData {
             79 to MoveData("Sleep Powder", 0, 11, 2),
             80 to MoveData("Petal Dance", 120, 11, 2),
             81 to MoveData("String Shot", 0, 6, 2),
-            82 to MoveData("Dragon Rage", 1, 15, 2),
+            82 to MoveData("Dragon Rage", 1, 15, 1, fixedDamageType = FixedDamageType.FLAT, fixedDamageAmount = 40),
             83 to MoveData("Fire Spin", 35, 9, 2),
             84 to MoveData("Thunder Shock", 40, 12, 2),
             85 to MoveData("Thunderbolt", 90, 12, 2),
@@ -2281,7 +2298,7 @@ object PokemonData {
             87 to MoveData("Thunder", 110, 12, 2),
             88 to MoveData("Rock Throw", 50, 5, 2),
             89 to MoveData("Earthquake", 100, 4, 2),
-            90 to MoveData("Fissure", 1, 4, 2),
+            90 to MoveData("Fissure", 1, 4, 0, accuracy = 30, fixedDamageType = FixedDamageType.OHKO),
             91 to MoveData("Dig", 80, 4, 2),
             92 to MoveData("Toxic", 0, 3, 2),
             93 to MoveData("Confusion", 50, 13, 2),
@@ -2289,10 +2306,10 @@ object PokemonData {
             95 to MoveData("Hypnosis", 0, 13, 2),
             96 to MoveData("Meditate", 0, 13, 2),
             97 to MoveData("Agility", 0, 13, 2),
-            98 to MoveData("Quick Attack", 40, 0, 2),
+            98 to MoveData("Quick Attack", 40, 0, 0, priority = 1),
             99 to MoveData("Rage", 20, 0, 2),
             100 to MoveData("Teleport", 0, 13, 2),
-            101 to MoveData("Night Shade", 1, 7, 2),
+            101 to MoveData("Night Shade", 1, 7, 1, fixedDamageType = FixedDamageType.LEVEL),
             102 to MoveData("Mimic", 0, 0, 2),
             103 to MoveData("Screech", 0, 0, 2),
             104 to MoveData("Double Team", 0, 0, 2),
@@ -2356,7 +2373,7 @@ object PokemonData {
             159 to MoveData("Sharpen", 0, 0, 2),
             160 to MoveData("Conversion", 0, 0, 2),
             161 to MoveData("Tri Attack", 80, 0, 2),
-            162 to MoveData("Super Fang", 1, 0, 2),
+            162 to MoveData("Super Fang", 1, 0, 0, accuracy = 90, fixedDamageType = FixedDamageType.HALF_TARGET_HP),
             163 to MoveData("Slash", 70, 0, 2),
             164 to MoveData("Substitute", 0, 0, 2),
             165 to MoveData("Struggle", 50, 0, 2),
@@ -2376,7 +2393,7 @@ object PokemonData {
             179 to MoveData("Reversal", 1, 1, 2),
             180 to MoveData("Spite", 0, 7, 2),
             181 to MoveData("Powder Snow", 40, 14, 2),
-            182 to MoveData("Protect", 0, 0, 2),
+            182 to MoveData("Protect", 0, 0, 2, priority = 4),
             183 to MoveData("Mach Punch", 40, 1, 2),
             184 to MoveData("Scary Face", 0, 0, 2),
             185 to MoveData("Feint Attack", 60, 16, 2),
@@ -2391,7 +2408,7 @@ object PokemonData {
             194 to MoveData("Destiny Bond", 0, 7, 2),
             195 to MoveData("Perish Song", 0, 0, 2),
             196 to MoveData("Icy Wind", 55, 14, 2),
-            197 to MoveData("Detect", 0, 1, 2),
+            197 to MoveData("Detect", 0, 1, 2, priority = 4),
             198 to MoveData("Bone Rush", 25, 4, 2),
             199 to MoveData("Lock On", 0, 0, 2),
             200 to MoveData("Outrage", 120, 15, 2),
@@ -2529,7 +2546,7 @@ object PokemonData {
             329 to MoveData("Sheer Cold", 1, 14, 2),
             330 to MoveData("Muddy Water", 90, 10, 2),
             331 to MoveData("Bullet Seed", 25, 11, 2),
-            332 to MoveData("Aerial Ace", 60, 2, 2),
+            332 to MoveData("Aerial Ace", 60, 2, 0, alwaysHits = true),
             333 to MoveData("Icicle Spear", 25, 14, 2),
             334 to MoveData("Iron Defense", 0, 8, 2),
             335 to MoveData("Block", 0, 0, 2),

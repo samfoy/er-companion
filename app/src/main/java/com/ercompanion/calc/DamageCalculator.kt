@@ -167,6 +167,18 @@ object DamageCalculator {
             )
         }
 
+        // ----- FIXED DAMAGE MOVES -----
+        // Handle special damage calculation moves (Seismic Toss, Dragon Rage, etc.)
+        if (moveData != null && moveData.fixedDamageType != com.ercompanion.data.FixedDamageType.NONE) {
+            return calculateFixedDamage(
+                moveData = moveData,
+                attackerLevel = attackerLevel,
+                targetCurrentHp = attackerHp, // For Super Fang
+                targetMaxHP = targetMaxHP,
+                moveName = moveName
+            )
+        }
+
         // Status moves or moves with 0 power
         if (movePower == 0) {
             return DamageResult(
@@ -871,5 +883,82 @@ object DamageCalculator {
      */
     fun generateConfusionDuration(): Int {
         return kotlin.random.Random.nextInt(1, 5)  // 1-4 turns
+    }
+
+    /**
+     * Calculate fixed damage moves (Seismic Toss, Dragon Rage, Super Fang, OHKO moves).
+     *
+     * @param moveData The move being used
+     * @param attackerLevel Attacker's level
+     * @param targetCurrentHp Target's current HP (for Super Fang)
+     * @param targetMaxHP Target's max HP
+     * @param moveName Move name for display
+     * @return DamageResult with fixed damage
+     */
+    private fun calculateFixedDamage(
+        moveData: com.ercompanion.data.MoveData,
+        attackerLevel: Int,
+        targetCurrentHp: Int,
+        targetMaxHP: Int,
+        moveName: String
+    ): DamageResult {
+        val damage = when (moveData.fixedDamageType) {
+            com.ercompanion.data.FixedDamageType.LEVEL -> {
+                // Seismic Toss, Night Shade: damage = user level
+                attackerLevel
+            }
+            com.ercompanion.data.FixedDamageType.FLAT -> {
+                // Dragon Rage (40), Sonic Boom (20)
+                moveData.fixedDamageAmount
+            }
+            com.ercompanion.data.FixedDamageType.HALF_TARGET_HP -> {
+                // Super Fang: damage = 50% of target's current HP (min 1)
+                val currentHp = if (targetCurrentHp > 0) targetCurrentHp else targetMaxHP
+                (currentHp / 2).coerceAtLeast(1)
+            }
+            com.ercompanion.data.FixedDamageType.OHKO -> {
+                // OHKO moves: always KO (set to target's current HP)
+                if (targetCurrentHp > 0) targetCurrentHp else targetMaxHP
+            }
+            com.ercompanion.data.FixedDamageType.PSYWAVE -> {
+                // Psywave: random 0.5x to 1.5x user level
+                val multiplier = kotlin.random.Random.nextFloat() * 1.0f + 0.5f  // 0.5 to 1.5
+                (attackerLevel * multiplier).toInt().coerceAtLeast(1)
+            }
+            com.ercompanion.data.FixedDamageType.NONE -> {
+                0  // Should never happen
+            }
+        }
+
+        val percentMin = (damage.toFloat() / targetMaxHP * 100).toInt()
+        val percentMax = percentMin  // Fixed damage has no range
+
+        val wouldKO = damage >= targetMaxHP
+        val effectLabel = when (moveData.fixedDamageType) {
+            com.ercompanion.data.FixedDamageType.LEVEL -> "Fixed: Level"
+            com.ercompanion.data.FixedDamageType.FLAT -> "Fixed: ${moveData.fixedDamageAmount}"
+            com.ercompanion.data.FixedDamageType.HALF_TARGET_HP -> "Fixed: 50% HP"
+            com.ercompanion.data.FixedDamageType.OHKO -> "OHKO"
+            com.ercompanion.data.FixedDamageType.PSYWAVE -> "Fixed: Random"
+            com.ercompanion.data.FixedDamageType.NONE -> ""
+        }
+
+        return DamageResult(
+            moveName = moveName,
+            minDamage = damage,
+            maxDamage = damage,
+            effectiveness = 1.0f,  // Fixed damage ignores type effectiveness
+            effectLabel = effectLabel,
+            percentMin = percentMin,
+            percentMax = percentMax,
+            isStab = false,  // Fixed damage doesn't get STAB
+            wouldKO = wouldKO,
+            isValid = true,
+            isCrit = false,  // Fixed damage can't crit (except Psywave in some gens)
+            hitCount = 1,
+            hitCountMin = 1,
+            hitCountMax = 1,
+            recoilDamage = 0
+        )
     }
 }

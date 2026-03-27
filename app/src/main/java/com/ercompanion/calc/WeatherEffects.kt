@@ -270,6 +270,7 @@ object TerrainEffects {
 
     /**
      * Check if terrain prevents priority moves (Psychic Terrain).
+     * Psychic Terrain prevents priority moves from hitting grounded Pokemon.
      */
     fun doesTerrainBlockPriority(
         terrain: Terrain,
@@ -281,8 +282,12 @@ object TerrainEffects {
         // Check if defender is grounded using proper grounded check
         if (!isGrounded(defender)) return false
 
-        // TODO: Check if move has priority (MoveData needs priority field)
-        // For now, assume no priority moves are blocked
+        // Check if move has positive priority
+        val moveData = com.ercompanion.data.PokemonData.getMoveData(moveId)
+        if (moveData != null && moveData.priority > 0) {
+            return true  // Psychic Terrain blocks priority moves against grounded targets
+        }
+
         return false
     }
 }

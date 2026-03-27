@@ -76,8 +76,15 @@ object MoveSimulator {
             return currentState.copy(turn = currentState.turn + 1)
         }
 
-        // Determine who moves first
-        val playerMovesFirst = calculateMoveOrder(state.player, state.enemy, currentState.weather)
+        // Determine who moves first (considering priority and speed)
+        val playerMovesFirst = calculateMoveOrder(
+            player = state.player,
+            enemy = state.enemy,
+            playerMoveId = actualPlayerMove,
+            enemyMoveId = enemyMoveId,
+            weather = currentState.weather,
+            curses = currentState.curses
+        )
 
         // Execute moves in order
         if (playerMovesFirst) {
@@ -531,13 +538,32 @@ object MoveSimulator {
     }
 
     /**
-     * Calculate move order based on speed and priority.
+     * Calculate move order based on priority and speed.
      * Returns true if player moves first.
      *
-     * For now, only considers speed. Priority moves can be added later.
+     * Priority brackets: -6 to +5 (Quick Attack = +1, Extremespeed = +2, etc.)
+     * Higher priority always goes first, regardless of speed.
+     * Within same priority, faster Pokemon goes first.
+     * Speed ties are decided randomly (50/50).
      */
-    fun calculateMoveOrder(player: BattlerState, enemy: BattlerState, weather: Weather = Weather.NONE): Boolean {
-        // Get effective speed (accounting for paralysis, weather abilities, items)
+    fun calculateMoveOrder(
+        player: BattlerState,
+        enemy: BattlerState,
+        playerMoveId: Int = 0,
+        enemyMoveId: Int = 0,
+        weather: Weather = Weather.NONE,
+        curses: CurseState = CurseState.NONE
+    ): Boolean {
+        // Get move priorities
+        val playerPriority = getMovePriority(playerMoveId, isEnemy = false, curses = curses)
+        val enemyPriority = getMovePriority(enemyMoveId, isEnemy = true, curses = curses)
+
+        // Higher priority moves always go first
+        if (playerPriority != enemyPriority) {
+            return playerPriority > enemyPriority
+        }
+
+        // Same priority: compare speed
         val playerSpeed = getEffectiveSpeed(player, weather)
         val enemySpeed = getEffectiveSpeed(enemy, weather)
 
@@ -547,6 +573,26 @@ object MoveSimulator {
         } else {
             playerSpeed > enemySpeed
         }
+    }
+
+    /**
+     * Get effective priority of a move, including curse modifiers.
+     *
+     * @param moveId The move ID
+     * @param isEnemy Whether this is the enemy's move (for priority curse)
+     * @param curses Current curse state
+     * @return Effective priority (-6 to +5, or higher with curses)
+     */
+    private fun getMovePriority(moveId: Int, isEnemy: Boolean, curses: CurseState): Int {
+        val moveData = PokemonData.getMoveData(moveId) ?: return 0
+        var priority = moveData.priority
+
+        // Priority curse: Enemy moves have 10% chance per curse to gain +1 priority
+        if (isEnemy && CurseEffects.shouldPriorityBoostOccur(curses)) {
+            priority += 1
+        }
+
+        return priority
     }
 
     /**
