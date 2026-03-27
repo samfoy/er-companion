@@ -1419,6 +1419,7 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
         defenseStat = defenseStat,
         movePower = moveData.power,
         moveType = moveData.type,
+        moveCategory = moveData.category,  // Required: 0=Physical, 1=Special
         attackerTypes = attackerTypes,
         defenderTypes = defenderTypes,
         targetMaxHP = enemyTarget.maxHp,

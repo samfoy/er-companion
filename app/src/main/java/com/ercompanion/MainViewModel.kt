@@ -629,6 +629,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             defenseStat = defStat,     // Already post-stat-stage for active battlers
             movePower = moveData.power,
             moveType = moveData.type,
+            moveCategory = moveData.category,  // REQUIRED: 0=Physical, 1=Special, 2=Status
             attackerTypes = attackerTypes,
             defenderTypes = defenderTypes,
             targetMaxHP = defender.maxHp,

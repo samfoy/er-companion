@@ -249,6 +249,7 @@ object DamageCalculator {
         // ----- STAT MODIFICATIONS -----
 
         // Apply attacker's held item stat modifiers (Choice Band/Specs)
+        // NOTE: moveCategory 0=Physical (uses Attack), 1=Special (uses SpAtk)
         val attackerItemEffect = com.ercompanion.data.ItemData.getItemEffect(attackerItem)
         var modifiedAttackStat = attackStat
         if (attackerItemEffect != null) {
@@ -262,10 +263,12 @@ object DamageCalculator {
                 currentHp = attackerHp,
                 maxHp = attackerMaxHp
             )
-            modifiedAttackStat = maxOf(statMods.attack, statMods.spAttack)
+            // Use correct stat based on move category: Physical=Attack, Special=SpAtk
+            modifiedAttackStat = if (moveCategory == 0) statMods.attack else statMods.spAttack
         }
 
         // Apply defender's held item stat modifiers
+        // NOTE: Physical moves use Defense, Special moves use SpDefense
         val defenderItemEffect = com.ercompanion.data.ItemData.getItemEffect(defenderItem)
         var modifiedDefenseStat = defenseStat
         if (defenderItemEffect != null) {
@@ -277,10 +280,14 @@ object DamageCalculator {
                 speed = 0,
                 itemId = defenderItem
             )
-            modifiedDefenseStat = maxOf(statMods.defense, statMods.spDefense)
+            // Use correct stat based on move category: Physical=Defense, Special=SpDefense
+            modifiedDefenseStat = if (moveCategory == 0) statMods.defense else statMods.spDefense
         }
 
         // Apply ability stat multipliers (Guts for attack, Marvel Scale for defense)
+        // NOTE: gBattleMons stats already include Intimidate and stat stage changes.
+        // Only apply ability multipliers for things NOT already baked in (e.g. Guts, Huge Power).
+        // Intimidate is already reflected in gBattleMons[slot].attack — do NOT double-apply.
         val abilityAtkMult = AbilityEffects.getAttackerStatMultiplier(attackerBattler, moveCategory)
         modifiedAttackStat = (modifiedAttackStat * abilityAtkMult).toInt()
 
@@ -313,15 +320,23 @@ object DamageCalculator {
         // ----- BASE DAMAGE CALCULATION -----
 
         val levelMod = (2 * attackerLevel / 5 + 2)
-        // Issue 1.4: Prevent division by zero - ensure defense is at least 1
+        // Prevent division by zero - ensure defense is at least 1
         val safeDefenseStat = modifiedDefenseStat.coerceAtLeast(1)
-        var baseDamage = (modifiedMovePower.toLong() * modifiedAttackStat * levelMod / safeDefenseStat / 50 + 2).toInt()
 
-        // Apply burn (0.5x if PHYSICAL and burned, unless Guts ability)
-        // Gen 6+: Burn only affects physical moves, not special moves
-        if (isBurned && moveCategory == 0 && attackerAbility != 62) {  // 62 = Guts, 0 = Physical
+        // Gen 3 formula from pokeemerald src/battle_script_commands.c:
+        // damage = (((2*level/5+2) * power * Atk / Def) / 50)
+        // then: if burned, damage /= 2   (BEFORE the +2)
+        // then: damage += 2
+        var baseDamage = (modifiedMovePower.toLong() * modifiedAttackStat * levelMod / safeDefenseStat / 50).toInt()
+
+        // Apply burn BEFORE +2 (Gen 3 order: burn halves, then +2 is added)
+        // Only affects physical moves; Guts ability (62) negates burn penalty
+        if (isBurned && moveCategory == 0 && attackerAbility != 62) {
             baseDamage = (baseDamage * 0.5f).toInt()
         }
+
+        // Add the +2 constant (Gen 3 formula)
+        baseDamage += 2
 
         // ----- STAB -----
 
