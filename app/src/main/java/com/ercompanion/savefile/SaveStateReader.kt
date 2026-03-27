@@ -318,6 +318,7 @@ class SaveStateReader(private val context: Context) {
         val ewram = cachedEwram ?: return false
         if (battlersCountOffset >= ewram.size) return false
         val battlersCount = ewram[battlersCountOffset].toInt() and 0xFF
+        android.util.Log.d("SaveStateReader", "readInBattle: battlersCount=$battlersCount")
         return battlersCount == 2 || battlersCount == 4  // Singles or doubles
     }
 

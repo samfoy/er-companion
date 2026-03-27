@@ -193,25 +193,39 @@ object MoveSimulator {
             newState = newState.copy(terrain = playerTerrain)
         }
 
-        // If it's a damaging move, calculate damage
+        // If it's a damaging move, check accuracy and calculate damage
         if (moveData != null && moveData.power > 0) {
-            val damageResult = calculateDamageWithStages(
-                attacker = newState.player,
-                defender = newState.enemy,
-                moveId = moveId,
-                weather = newState.weather,
-                terrain = newState.terrain
+            // Check if move hits
+            val moveHits = AccuracyCalculator.rollForHit(
+                moveData = moveData,
+                attackerAccuracy = newState.player.statStages.accuracy,
+                defenderEvasion = newState.enemy.statStages.evasion,
+                attackerAbility = newState.player.mon.ability,
+                defenderAbility = newState.enemy.mon.ability,
+                attackerConfused = newState.player.confusionTurns > 0,
+                weather = newState.weather
             )
 
-            val newEnemyHp = (state.enemy.currentHp - damageResult.maxDamage).coerceAtLeast(0)
-            newState = newState.copy(
-                enemy = newState.enemy.copy(currentHp = newEnemyHp)
-            )
+            if (moveHits) {
+                val damageResult = calculateDamageWithStages(
+                    attacker = newState.player,
+                    defender = newState.enemy,
+                    moveId = moveId,
+                    weather = newState.weather,
+                    terrain = newState.terrain
+                )
 
-            // Apply KO abilities (Moxie, Beast Boost) if enemy was KO'd
-            if (newEnemyHp <= 0) {
-                newState = AbilityEffects.applyKOAbility(newState, isPlayerKO = true)
+                val newEnemyHp = (state.enemy.currentHp - damageResult.maxDamage).coerceAtLeast(0)
+                newState = newState.copy(
+                    enemy = newState.enemy.copy(currentHp = newEnemyHp)
+                )
+
+                // Apply KO abilities (Moxie, Beast Boost) if enemy was KO'd
+                if (newEnemyHp <= 0) {
+                    newState = AbilityEffects.applyKOAbility(newState, isPlayerKO = true)
+                }
             }
+            // If move misses, no damage is dealt but turn still continues
         }
 
         // If it's a stat-changing move, apply the stat changes
@@ -299,25 +313,39 @@ object MoveSimulator {
             newState = newState.copy(terrain = enemyTerrain)
         }
 
-        // If it's a damaging move, calculate damage
+        // If it's a damaging move, check accuracy and calculate damage
         if (moveData != null && moveData.power > 0) {
-            val damageResult = calculateDamageWithStages(
-                attacker = newState.enemy,
-                defender = newState.player,
-                moveId = moveId,
-                weather = newState.weather,
-                terrain = newState.terrain
+            // Check if move hits
+            val moveHits = AccuracyCalculator.rollForHit(
+                moveData = moveData,
+                attackerAccuracy = newState.enemy.statStages.accuracy,
+                defenderEvasion = newState.player.statStages.evasion,
+                attackerAbility = newState.enemy.mon.ability,
+                defenderAbility = newState.player.mon.ability,
+                attackerConfused = newState.enemy.confusionTurns > 0,
+                weather = newState.weather
             )
 
-            val newPlayerHp = (state.player.currentHp - damageResult.maxDamage).coerceAtLeast(0)
-            newState = newState.copy(
-                player = newState.player.copy(currentHp = newPlayerHp)
-            )
+            if (moveHits) {
+                val damageResult = calculateDamageWithStages(
+                    attacker = newState.enemy,
+                    defender = newState.player,
+                    moveId = moveId,
+                    weather = newState.weather,
+                    terrain = newState.terrain
+                )
 
-            // Apply KO abilities (Moxie, Beast Boost) if player was KO'd
-            if (newPlayerHp <= 0) {
-                newState = AbilityEffects.applyKOAbility(newState, isPlayerKO = false)
+                val newPlayerHp = (state.player.currentHp - damageResult.maxDamage).coerceAtLeast(0)
+                newState = newState.copy(
+                    player = newState.player.copy(currentHp = newPlayerHp)
+                )
+
+                // Apply KO abilities (Moxie, Beast Boost) if player was KO'd
+                if (newPlayerHp <= 0) {
+                    newState = AbilityEffects.applyKOAbility(newState, isPlayerKO = false)
+                }
             }
+            // If move misses, no damage is dealt but turn still continues
         }
 
         // Apply enemy stat changes (if any)

@@ -100,7 +100,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startPolling() {
         pollingJob?.cancel()
-        pollingJob = viewModelScope.launch {
+        pollingJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             while (true) {
                 try {
                     val now = System.currentTimeMillis()

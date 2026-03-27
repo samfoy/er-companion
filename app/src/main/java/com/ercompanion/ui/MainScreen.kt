@@ -27,7 +27,6 @@ import androidx.compose.ui.layout.ContentScale
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.ercompanion.MainViewModel
-import com.ercompanion.calc.Weather
 import com.ercompanion.data.MoveData
 import com.ercompanion.data.PokemonData
 import com.ercompanion.network.RetroArchClient
@@ -99,7 +98,7 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Title + debug tap
+                // Left: Title (tap to show debug)
                 Text(
                     text = "ER",
                     fontSize = 16.sp,
@@ -210,16 +209,17 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // Debug panel (only show in battle)
-            DebugPanel(
-                debugLog = debugLog,
-                currentManualPath = viewModel.debugManualPath,
-                saveStateStatus = viewModel.getSaveStateStatus(),
-                searchPaths = viewModel.getSaveStateSearchPaths(),
-                onApply = { path -> viewModel.applySaveStatePath(path) }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
+            // Debug panel (hidden by default, tap "ER" to show)
+            if (showDebug) {
+                DebugPanel(
+                    debugLog = debugLog,
+                    currentManualPath = viewModel.debugManualPath,
+                    saveStateStatus = viewModel.getSaveStateStatus(),
+                    searchPaths = viewModel.getSaveStateSearchPaths(),
+                    onApply = { path -> viewModel.applySaveStatePath(path) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         } else {
             // Compact header for out-of-battle: just connection status and rescan
             Row(
@@ -285,19 +285,29 @@ fun MainScreen(
             // Read active slots for doubles support
             val activePlayerSlots = viewModel.activePlayerSlots.collectAsState().value
             val effectiveActiveSlots = activePlayerSlots.ifEmpty {
-                // If no active slots from memory, use activePlayerSlot or default to slot 0
-                if (activePlayerSlot >= 0) listOf(activePlayerSlot) else listOf(0)
+                if (activePlayerSlot >= 0) listOf(activePlayerSlot) else listOf(0)  // Default to slot 0
             }
-
             val activeEnemySlots = viewModel.activeEnemySlots.collectAsState().value
             val activeMon = effectiveActiveSlots.firstOrNull()?.let { partyState.getOrNull(it) }
                             ?: partyState.firstOrNull { it != null }
+
+            // Debug logging
+            android.util.Log.d("MainScreen", "Battle detected: activePlayerSlots=$activePlayerSlots, activePlayerSlot=$activePlayerSlot, effectiveActiveSlots=$effectiveActiveSlots")
 
             // Track which bench mon is expanded (null = none)
             var expandedBenchIndex by remember { mutableStateOf<Int?>(null) }
             // Track which enemy mon is selected (default = lead)
             var selectedEnemyIndex by remember { mutableStateOf(0) }
             val selectedEnemy = enemyPartyState.getOrNull(selectedEnemyIndex) ?: enemyLead
+
+            // Optimal line prediction at top (most important info first)
+            OptimalLineDisplay(
+                activeMon = activeMon,
+                enemyLead = enemyLead,
+                viewModel = viewModel
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -319,6 +329,7 @@ fun MainScreen(
                     partyState.forEachIndexed { index, mon ->
                         if (mon != null) {
                             val isActive = index in effectiveActiveSlots
+                            android.util.Log.d("MainScreen", "Pokemon $index (${PokemonData.getSpeciesName(mon.species)}): isActive=$isActive, effectiveActiveSlots=$effectiveActiveSlots")
                             if (isActive) {
                                 PokemonCard(
                                     viewModel = viewModel,
@@ -389,14 +400,6 @@ fun MainScreen(
                     }
                 }
             }
-
-            // ── OPTIMAL LINE PREDICTION (below the two columns) ──────────────────────
-            Spacer(modifier = Modifier.height(8.dp))
-            OptimalLineDisplay(
-                activeMon = activeMon,
-                enemyLead = enemyLead,
-                viewModel = viewModel
-            )
         } else {
             // ── OUT-OF-BATTLE LAYOUT: 2-column grid, all 6 mons visible ──────────────
             if (expandedOutOfBattleIndex != null) {
@@ -457,8 +460,6 @@ fun MainScreen(
         }
     }
 
-        // Curse button is now in the header (removed floating action button)
-
         // Curse dialog
         if (showCurseDialog) {
             AlertDialog(
@@ -505,7 +506,9 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
                 attackerTypes = PokemonData.getSpeciesTypes(mon.species),
                 defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
                 targetMaxHP = enemyTarget.maxHp,
-                moveCategory = md.category
+                moveCategory = md.category,
+                forceCrit = false,
+                allowCrits = false
             )
             if (!result.isValid) return@mapNotNull null
             if (enemyTarget.maxHp > 0) (result.maxDamage * 100 / enemyTarget.maxHp) else 0
@@ -526,7 +529,9 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
                 attackerTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
                 defenderTypes = PokemonData.getSpeciesTypes(mon.species),
                 targetMaxHP = mon.maxHp,
-                moveCategory = md.category
+                moveCategory = md.category,
+                forceCrit = false,
+                allowCrits = false
             )
             if (!result.isValid) return@mapNotNull null
             if (mon.maxHp > 0) (result.maxDamage * 100 / mon.maxHp) else 0
@@ -788,7 +793,7 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1A1A)),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             // Header: sprite + name/type + HP bar
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val ctx = LocalContext.current
@@ -799,7 +804,7 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
                         .build(),
                     contentDescription = speciesName,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(40.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -886,9 +891,9 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 
             // AI move prediction
             if (scoredMoves.isNotEmpty() && activeMon != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Divider(color = Color(0xFF3A2A2A))
                 Spacer(modifier = Modifier.height(6.dp))
+                Divider(color = Color(0xFF3A2A2A))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = if (isRandom) "AI: random (${predicted.size} tied)" else "AI will likely use:",
@@ -950,9 +955,9 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 
             // Enemy moves with damage calculations
             if (enemyLead.moves.isNotEmpty() && activeMon != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Divider(color = Color(0xFF3A2A2A))
                 Spacer(modifier = Modifier.height(6.dp))
+                Divider(color = Color(0xFF3A2A2A))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = "Enemy Moves",
@@ -1098,16 +1103,16 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false, defaultExpanded: Boolean = false, onHeaderClick: (() -> Unit)? = null) {
     val speciesName = PokemonData.getSpeciesName(mon.species)
 
-    // Key on isActive so the card auto-expands when this mon becomes the active battler
-    var expanded by remember(mon.species, isActive) { mutableStateOf(defaultExpanded || isActive) }
-    var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
-
-    // Force expansion when becoming active or when defaultExpanded is true
-    androidx.compose.runtime.LaunchedEffect(isActive, defaultExpanded) {
-        if (isActive || defaultExpanded) {
-            expanded = true
-        }
+    // Key on all three: species, isActive, and defaultExpanded
+    // This ensures state resets correctly when any of these change
+    var expanded by remember(mon.species, isActive, defaultExpanded) {
+        val initialExpanded = isActive || defaultExpanded
+        android.util.Log.d("PokemonCard", "Creating card for $speciesName: isActive=$isActive, defaultExpanded=$defaultExpanded, initialExpanded=$initialExpanded, slot=$slotNumber")
+        mutableStateOf(initialExpanded)
     }
+    var statsExpanded by remember(mon.species) { mutableStateOf(false) }
+    var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
+    var hiddenPowerExpanded by remember(mon.species) { mutableStateOf(false) }
     val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
 
     Card(
@@ -1115,7 +1120,10 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
             .fillMaxWidth()
             .clickable {
                 if (onHeaderClick != null && expanded) onHeaderClick()
-                else expanded = !expanded
+                else {
+                    expanded = !expanded
+                    android.util.Log.d("PokemonCard", "$speciesName clicked: expanded now = $expanded")
+                }
             },
         colors = CardDefaults.cardColors(
             containerColor = if (isActive) Color(0xFF1A2A1A) else MaterialTheme.colorScheme.surface
@@ -1126,7 +1134,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(8.dp)
         ) {
             // Header: Slot number, sprite, name, level
             Row(
@@ -1151,8 +1159,8 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         contentDescription = speciesName,
                         contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                         modifier = Modifier
-                            .size(48.dp)
-                            .padding(end = 8.dp)
+                            .size(32.dp)
+                            .padding(end = 6.dp)
                     )
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1183,14 +1191,16 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         }
                         // Held item indicator
                         if (mon.heldItem > 0) {
-                            val itemName = com.ercompanion.data.ItemData.getItemName(mon.heldItem)
-                            Text(
-                                text = "ITM: $itemName",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFFD700),
-                                fontSize = 9.sp,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
+                            val itemEffect = com.ercompanion.data.ItemData.getItemEffect(mon.heldItem)
+                            if (itemEffect != null) {
+                                Text(
+                                    text = "ITM: ${itemEffect.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFFD700),
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
                         }
                         // Ability indicator
                         if (mon.ability > 0) {
@@ -1242,7 +1252,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // HP bar
             Column {
@@ -1303,27 +1313,49 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
             }
 
             // Expanded details
-            AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
-                    Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 8.dp))
+            if (expanded) {
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 6.dp))
 
-                    // Stats
+                    // Stats (collapsible)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.fillMaxWidth().clickable { statsExpanded = !statsExpanded }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StatItem("ATK", mon.attack)
-                        StatItem("DEF", mon.defense)
-                        StatItem("SPD", mon.speed)
+                        Text(
+                            text = "Stats",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (statsExpanded) "▲" else "▼",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray
+                        )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatItem("SP.ATK", mon.spAttack)
-                        StatItem("SP.DEF", mon.spDefense)
-                        StatItem("EXP", mon.experience)
+                    androidx.compose.animation.AnimatedVisibility(visible = statsExpanded) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                StatItem("ATK", mon.attack)
+                                StatItem("DEF", mon.defense)
+                                StatItem("SPD", mon.speed)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                StatItem("SP.ATK", mon.spAttack)
+                                StatItem("SP.DEF", mon.spDefense)
+                                StatItem("EXP", mon.experience)
+                            }
+                        }
                     }
 
                     // Nature display
@@ -1503,7 +1535,7 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         }
                     }
 
-                    // Hidden Power calculator
+                    // Hidden Power calculator (collapsible)
                     if (mon.ivHp > 0 || mon.ivAttack > 0) {  // Check if we have IV data
                         val hiddenPower = com.ercompanion.calc.HiddenPowerCalculator.calculate(
                             ivHp = mon.ivHp,
@@ -1514,12 +1546,11 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                             ivSpDefense = mon.ivSpDefense
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Divider(color = Color.DarkGray)
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().clickable { hiddenPowerExpanded = !hiddenPowerExpanded }
+                                .padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1529,6 +1560,13 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                                 color = Color(0xFFFFEB3B),
                                 fontWeight = FontWeight.Bold
                             )
+                            Text(
+                                text = if (hiddenPowerExpanded) "▲" else "▼",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                        }
+                        androidx.compose.animation.AnimatedVisibility(visible = hiddenPowerExpanded) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TypeBadge(
                                     typeId = when (hiddenPower.typeName) {
@@ -1565,13 +1603,17 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
 
                     // Moves with damage calculations
                     if (mon.moves.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Divider(color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Moves",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color.Gray
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         // Calculate best move for highlighting
                         val bestMoveId = if (enemyTarget != null) {
@@ -1589,7 +1631,9 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                                     attackerTypes = PokemonData.getSpeciesTypes(mon.species),
                                     defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
                                     targetMaxHP = enemyTarget.maxHp,
-                                    moveCategory = md.category
+                                    moveCategory = md.category,
+                                    forceCrit = false,
+                                    allowCrits = false
                                 )
                                 if (!result.isValid) return@maxByOrNull 0
                                 result.maxDamage
@@ -1672,21 +1716,22 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
     val attackStat = if (moveData.category == 0) mon.attack else mon.spAttack
     val defenseStat = if (moveData.category == 0) enemyTarget.defense else enemyTarget.spDefense
 
-    // Calculate normal damage (no crit)
+    // Calculate normal damage (no crits)
     val normalResult = com.ercompanion.calc.DamageCalculator.calc(
         attackerLevel = mon.level,
         attackStat = attackStat,
         defenseStat = defenseStat,
         movePower = moveData.power,
         moveType = moveData.type,
-        moveCategory = moveData.category,  // Required: 0=Physical, 1=Special
+        moveCategory = moveData.category,
         attackerTypes = attackerTypes,
         defenderTypes = defenderTypes,
         targetMaxHP = enemyTarget.maxHp,
         isBurned = false,
-        weather = Weather.NONE,
+        weather = com.ercompanion.calc.Weather.NONE,
         moveName = moveName,
-        allowCrits = false  // Force no crit for baseline
+        forceCrit = false,
+        allowCrits = false
     )
 
     // Calculate crit damage
@@ -1701,15 +1746,13 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
         defenderTypes = defenderTypes,
         targetMaxHP = enemyTarget.maxHp,
         isBurned = false,
-        weather = Weather.NONE,
+        weather = com.ercompanion.calc.Weather.NONE,
         moveName = moveName,
-        forceCrit = true  // Force crit
+        forceCrit = true
     )
 
-    val result = normalResult  // Use normal result for effectiveness color/validity
-
     // Check if result is invalid (pre-battle)
-    if (!result.isValid) {
+    if (!normalResult.isValid) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1739,36 +1782,33 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
 
     // Color based on effectiveness
     val effectColor = when {
-        result.effectiveness == 0f -> Color.DarkGray
-        result.effectiveness < 1f -> Color.Gray
-        result.effectiveness > 1f -> Color(0xFFFF6B6B) // Red for super effective
+        normalResult.effectiveness == 0f -> Color.DarkGray
+        normalResult.effectiveness < 1f -> Color.Gray
+        normalResult.effectiveness > 1f -> Color(0xFFFF6B6B) // Red for super effective
         else -> MaterialTheme.colorScheme.onSurface
     }
 
-    val damageText = if (normalResult.maxDamage > 0) {
-        // Show both normal and crit ranges compactly
-        val normalRange = "${normalResult.minDamage}–${normalResult.maxDamage}"
-        val critRange = "${critResult.minDamage}–${critResult.maxDamage}"
-        "$normalRange | $critRange★"
+    val normalDamageText = if (normalResult.maxDamage > 0) {
+        "${normalResult.minDamage}–${normalResult.maxDamage} (${normalResult.percentMin}–${normalResult.percentMax}%)"
     } else {
         "No damage"
     }
 
-    val percentText = if (normalResult.maxDamage > 0) {
-        "${normalResult.percentMin}–${normalResult.percentMax}% | ${critResult.percentMin}–${critResult.percentMax}%★"
+    val critDamageText = if (critResult.maxDamage > 0) {
+        "${critResult.minDamage}–${critResult.maxDamage} (${critResult.percentMin}–${critResult.percentMax}%)"
     } else {
-        ""
+        "No damage"
     }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = 1.dp),
         color = if (isBestMove) Color(0xFF1A3A1A) else Color.Transparent,
-        shape = RoundedCornerShape(6.dp)
+        shape = RoundedCornerShape(4.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = if (isBestMove) 8.dp else 0.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = if (isBestMove) 6.dp else 0.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1776,59 +1816,61 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
                 Text(
                     text = if (isBestMove) "⭐ $moveName" else "• $moveName",
                     style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
                     color = if (isBestMove) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface,
                     fontWeight = if (isBestMove) FontWeight.Bold else FontWeight.Normal
                 )
                 if (isRecommended) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("REC", fontSize = 8.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("REC", fontSize = 7.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
+                // Normal damage
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = damageText,
+                        text = normalDamageText,
                         style = MaterialTheme.typography.bodySmall,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         color = effectColor,
-                        fontWeight = if (result.effectiveness > 1f || isBestMove) FontWeight.Bold else FontWeight.Normal
+                        fontWeight = if (normalResult.effectiveness > 1f || isBestMove) FontWeight.Bold else FontWeight.Normal
                     )
                     if (normalResult.wouldKO) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "KO!", fontSize = 10.sp, color = HPRed, fontWeight = FontWeight.Bold)
-                    }
-                    if (critResult.wouldKO && !normalResult.wouldKO) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "KO★", fontSize = 10.sp, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(text = "KO!", fontSize = 9.sp, color = HPRed, fontWeight = FontWeight.Bold)
                     }
                 }
-                // Percent display
-                if (percentText.isNotEmpty()) {
+                // Crit damage
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = percentText,
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "C: $critDamageText",
+                        style = MaterialTheme.typography.bodySmall,
                         fontSize = 8.sp,
-                        color = Color(0xFF888888)
+                        color = Color(0xFFFFD700)
                     )
+                    if (critResult.wouldKO) {
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(text = "KO!", fontSize = 8.sp, color = HPRed, fontWeight = FontWeight.Bold)
+                    }
                 }
                 // PP display
                 if (pp > 0) {
                     Text(
-                        text = "PP: $pp",
+                        text = "PP:$pp",
                         style = MaterialTheme.typography.labelSmall,
                         color = when {
                             pp <= 5 -> Color(0xFFF44336)
                             pp <= 10 -> Color(0xFFFFEB3B)
                             else -> Color(0xFF888888)
                         },
-                        fontSize = 8.sp
+                        fontSize = 7.sp
                     )
                 }
-                if (result.effectLabel.isNotEmpty()) {
+                if (normalResult.effectLabel.isNotEmpty()) {
                     Text(
-                        text = result.effectLabel,
+                        text = normalResult.effectLabel,
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
+                        fontSize = 8.sp,
                         color = effectColor
                     )
                 }
@@ -2083,11 +2125,10 @@ fun OptimalLineDisplay(
 ) {
     if (activeMon == null || enemyLead == null) return
 
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }  // Collapsed by default
     // 0=2-turn, 1=3-turn, 2=MC (Deep/50 samples), 3=MC+ (Exhaustive/100 samples + switching)
-    var analysisMode by remember { mutableStateOf(0) }
-    // Reset mcRunning when Pokemon change to prevent stale simulations
-    var mcRunning by remember(activeMon.species, enemyLead.species) { mutableStateOf(false) }
+    var analysisMode by remember { mutableStateOf(3) }  // Default to MC+ (Exhaustive)
+    var mcRunning by remember { mutableStateOf(false) }
     val activeCurses = viewModel.curseState.collectAsState().value
     val coroutineScope = rememberCoroutineScope()
 
@@ -2109,10 +2150,39 @@ fun OptimalLineDisplay(
     }
 
     // Monte Carlo report (modes 2/3) — runs async, separate cache per depth
-    // IMPORTANT: Key on species/moves/curses so reports reset when Pokemon change
-    var mcReport by remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses) { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
-    var mcReportPlus by remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses) { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
-    var mcProgress by remember(activeMon.species, enemyLead.species) { mutableStateOf("") }
+    var mcReport by remember { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
+    var mcReportPlus by remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves) {
+        mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null)
+    }
+    var mcProgress by remember { mutableStateOf("") }
+
+    // Auto-run MC+ when Pokemon or moves change
+    LaunchedEffect(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves) {
+        if (analysisMode == 3 && mcReportPlus == null && !mcRunning) {
+            mcRunning = true
+            mcProgress = "Running full analysis…"
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                try {
+                    val result = com.ercompanion.calc.DeepAnalysisMode.performDeepAnalysis(
+                        player = activeMon,
+                        enemy = enemyLead,
+                        depth = com.ercompanion.calc.AnalysisDepth.EXHAUSTIVE,
+                        curses = activeCurses,
+                        onProgress = { msg -> mcProgress = msg }
+                    )
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        mcReportPlus = result
+                        mcRunning = false
+                    }
+                } catch (e: Exception) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        mcProgress = "Error: ${e.message}"
+                        mcRunning = false
+                    }
+                }
+            }
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -2202,11 +2272,7 @@ fun OptimalLineDisplay(
                         when {
                             mcRunning -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "⟳",
-                                        fontSize = 14.sp,
-                                        color = Color(0xFFFFD700)
-                                    )
+                                    Text(text = "⟳", fontSize = 14.sp, color = Color(0xFFFFD700))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = mcProgress, fontSize = 10.sp, color = Color.Gray)
                                 }
