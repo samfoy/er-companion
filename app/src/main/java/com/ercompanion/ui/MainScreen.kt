@@ -1107,7 +1107,8 @@ fun EnemyLeadCard(enemyLead: PartyMon, activeMon: PartyMon?, viewModel: MainView
 
 @Composable
 fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyTarget: PartyMon? = null, isActive: Boolean = false, showAiPrediction: Boolean = false, defaultExpanded: Boolean = false, onHeaderClick: (() -> Unit)? = null) {
-    var expanded by remember(mon.species) { mutableStateOf(defaultExpanded || isActive) }
+    // Key on isActive so the card auto-expands when this mon becomes the active battler
+    var expanded by remember(mon.species, isActive) { mutableStateOf(defaultExpanded || isActive) }
     var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
     val speciesName = PokemonData.getSpeciesName(mon.species)
     val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
