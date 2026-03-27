@@ -272,7 +272,9 @@ object AddressValidator {
         val encrypted = readU32LE(data, substructOffset)
         val decrypted = encrypted xor key
 
-        // Species is bits 0-10
+        // Species is bits 0-10 (11-bit field in Growth substructure)
+        // Emerald Rogue uses Gen 3 engine format: lower 11 bits = species ID
+        // Upper bits used for form/shiny/other flags
         return (decrypted and 0x7FF).toInt()
     }
 

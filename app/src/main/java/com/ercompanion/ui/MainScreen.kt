@@ -1186,16 +1186,14 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                         }
                         // Held item indicator
                         if (mon.heldItem > 0) {
-                            val itemEffect = com.ercompanion.data.ItemData.getItemEffect(mon.heldItem)
-                            if (itemEffect != null) {
-                                Text(
-                                    text = "ITM: ${itemEffect.name}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFFFD700),
-                                    fontSize = 9.sp,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
-                            }
+                            val itemName = com.ercompanion.data.ItemData.getItemName(mon.heldItem)
+                            Text(
+                                text = "ITM: $itemName",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFD700),
+                                fontSize = 9.sp,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
                         }
                         // Ability indicator
                         if (mon.ability > 0) {
@@ -2048,7 +2046,8 @@ fun OptimalLineDisplay(
     var expanded by remember { mutableStateOf(false) }
     // 0=2-turn, 1=3-turn, 2=MC (Deep/50 samples), 3=MC+ (Exhaustive/100 samples + switching)
     var analysisMode by remember { mutableStateOf(0) }
-    var mcRunning by remember { mutableStateOf(false) }
+    // Reset mcRunning when Pokemon change to prevent stale simulations
+    var mcRunning by remember(activeMon.species, enemyLead.species) { mutableStateOf(false) }
     val activeCurses = viewModel.curseState.collectAsState().value
     val coroutineScope = rememberCoroutineScope()
 
@@ -2070,9 +2069,10 @@ fun OptimalLineDisplay(
     }
 
     // Monte Carlo report (modes 2/3) — runs async, separate cache per depth
-    var mcReport by remember { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
-    var mcReportPlus by remember { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
-    var mcProgress by remember { mutableStateOf("") }
+    // IMPORTANT: Key on species/moves/curses so reports reset when Pokemon change
+    var mcReport by remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses) { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
+    var mcReportPlus by remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses) { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
+    var mcProgress by remember(activeMon.species, enemyLead.species) { mutableStateOf("") }
 
     Card(
         modifier = Modifier

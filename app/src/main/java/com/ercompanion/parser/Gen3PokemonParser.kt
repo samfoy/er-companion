@@ -130,8 +130,14 @@ object Gen3PokemonParser {
         val substructures = reorderSubstructures(decryptedData, personality)
 
         // Parse substructure A: species, item, experience, friendship
-        val species = readU16(substructures[0], 0)
-        val heldItem = readU16(substructures[0], 2)
+        // Emerald Rogue bitfield layout (first u32 at offset 0):
+        // - species: bits 0-10 (11 bits, max 2047)
+        // - heldItem: bits 11-20 (10 bits, max 1023)
+        // - teraType: bits 21-25 (5 bits)
+        // - unused: bits 26-31
+        val firstWord = readU32(substructures[0], 0)
+        val species = (firstWord and 0x7FFu).toInt()  // Extract bits 0-10
+        val heldItem = ((firstWord shr 11) and 0x3FFu).toInt()  // Extract bits 11-20 (10 bits)
         val experience = readU32(substructures[0], 4)
         val friendship = readU8(substructures[0], 9)
 
@@ -171,9 +177,9 @@ object Gen3PokemonParser {
         val spAttack = readU16(data, 0x60)
         val spDefense = readU16(data, 0x62)
 
-        // Validate — ER has up to 1526 species
+        // Validate — ER has up to 1526 species (after 11-bit mask)
         if (species == 0 || species > 1526) {
-            android.util.Log.w("Gen3Parser", "Rejected species=$species (out of range 1-1526) personality=0x${personality.toString(16)}")
+            android.util.Log.w("Gen3Parser", "Rejected species=$species (out of range 1-1526, after 11-bit mask) personality=0x${personality.toString(16)}")
             return null
         }
 

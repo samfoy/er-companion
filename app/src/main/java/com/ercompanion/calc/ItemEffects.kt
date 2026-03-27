@@ -10,39 +10,60 @@ import kotlin.random.Random
  */
 object ItemEffects {
 
-    // Item ID constants (from ItemData.kt)
-    private const val CHOICE_BAND = 222
-    private const val CHOICE_SPECS = 223
-    private const val CHOICE_SCARF = 224
-    private const val LIFE_ORB = 225
-    private const val EXPERT_BELT = 226
-    private const val MUSCLE_BAND = 227
-    private const val WISE_GLASSES = 228
-    private const val LEFTOVERS = 234
-    private const val FOCUS_SASH = 235
-    private const val FOCUS_BAND = 275
-    private const val FLAME_ORB = 280
-    private const val TOXIC_ORB = 281
-    private const val BLACK_SLUDGE = 282
-    private const val IRON_BALL = 285
+    // Item ID constants from emerogue/include/constants/items.h
+    private const val CHOICE_BAND = 453
+    private const val CHOICE_SPECS = 454
+    private const val CHOICE_SCARF = 455
+    private const val LIFE_ORB = 490
+    private const val EXPERT_BELT = 488
+    private const val MUSCLE_BAND = 486
+    private const val WISE_GLASSES = 487
+    private const val LEFTOVERS = 483
+    private const val FOCUS_SASH = 492
+    private const val FOCUS_BAND = 480
+    private const val FLAME_ORB = 456
+    private const val TOXIC_ORB = 457
+    private const val BLACK_SLUDGE = 498
+    private const val IRON_BALL = 495
 
-    // Type-boosting items (Gen 3 format)
-    private const val CHARCOAL = 250
-    private const val MYSTIC_WATER = 251
-    private const val MIRACLE_SEED = 252
-    private const val MAGNET = 253
-    private const val NEVERMELTICE = 254
-    private const val BLACK_BELT = 255
-    private const val POISON_BARB = 256
-    private const val SOFT_SAND = 257
-    private const val SHARP_BEAK = 258
-    private const val TWISTED_SPOON = 259
-    private const val SILVER_POWDER = 260
-    private const val HARD_STONE = 261
-    private const val SPELL_TAG = 262
-    private const val DRAGON_FANG = 263
-    private const val BLACK_GLASSES = 264
-    private const val METAL_COAT = 265
+    // Type plates (Gen 4 - 1.2x boost)
+    private const val FLAME_PLATE = 261
+    private const val SPLASH_PLATE = 262
+    private const val ZAP_PLATE = 263
+    private const val MEADOW_PLATE = 264
+    private const val ICICLE_PLATE = 265
+    private const val FIST_PLATE = 266
+    private const val TOXIC_PLATE = 267
+    private const val EARTH_PLATE = 268
+    private const val SKY_PLATE = 269
+    private const val MIND_PLATE = 270
+    private const val INSECT_PLATE = 271
+    private const val STONE_PLATE = 272
+    private const val SPOOKY_PLATE = 273
+    private const val DRACO_PLATE = 274
+    private const val DREAD_PLATE = 275
+    private const val IRON_PLATE = 276
+    private const val PIXIE_PLATE = 277
+
+    // Type gems (Gen 5 - 1.3x boost, one-time use)
+    private const val NORMAL_GEM = 350
+    private const val FIRE_GEM = 351
+    private const val WATER_GEM = 352
+    private const val ELECTRIC_GEM = 353
+    private const val GRASS_GEM = 354
+    private const val ICE_GEM = 355
+    private const val FIGHTING_GEM = 356
+    private const val POISON_GEM = 357
+    private const val GROUND_GEM = 358
+    private const val FLYING_GEM = 359
+    private const val PSYCHIC_GEM = 360
+    private const val BUG_GEM = 361
+    private const val ROCK_GEM = 362
+    private const val GHOST_GEM = 363
+    private const val DRAGON_GEM = 364
+    private const val DARK_GEM = 365
+    private const val STEEL_GEM = 366
+    private const val FAIRY_GEM = 367
 
     /**
      * Check if item locks the user into a move (Choice items).
@@ -89,30 +110,80 @@ object ItemEffects {
     }
 
     /**
-     * Type-boosting items (Charcoal, Mystic Water, etc.)
-     * Each gives 1.2x boost to moves of their type.
+     * Type-boosting items (Gen 3 items, Type Plates, and Type Gems)
+     * Gen 3 items give 1.1x, Plates give 1.2x, Gems give 1.3x (one-time use).
      */
     private fun getTypeBoostMultiplier(itemId: Int, moveType: Int): Float {
-        val typeBoostItems = mapOf(
-            CHARCOAL to 9,        // Fire
-            MYSTIC_WATER to 10,   // Water
-            MIRACLE_SEED to 11,   // Grass
-            MAGNET to 12,         // Electric
-            NEVERMELTICE to 14,   // Ice
-            BLACK_BELT to 1,      // Fighting
-            POISON_BARB to 3,     // Poison
-            SOFT_SAND to 4,       // Ground
-            SHARP_BEAK to 2,      // Flying
-            TWISTED_SPOON to 13,  // Psychic
-            SILVER_POWDER to 6,   // Bug
-            HARD_STONE to 5,      // Rock
-            SPELL_TAG to 7,       // Ghost
-            DRAGON_FANG to 15,    // Dragon
-            BLACK_GLASSES to 16,  // Dark
-            METAL_COAT to 8       // Steel
+        // Gen 3 Type-boosting items - 1.1x boost
+        val typeItems = mapOf(
+            436 to 0,   // SILK_SCARF - Normal
+            437 to 9,   // CHARCOAL - Fire
+            438 to 10,  // MYSTIC_WATER - Water
+            439 to 12,  // MAGNET - Electric
+            440 to 11,  // MIRACLE_SEED - Grass
+            441 to 14,  // NEVER_MELT_ICE - Ice
+            442 to 1,   // BLACK_BELT - Fighting
+            443 to 3,   // POISON_BARB - Poison
+            444 to 4,   // SOFT_SAND - Ground
+            445 to 2,   // SHARP_BEAK - Flying
+            446 to 13,  // TWISTED_SPOON - Psychic
+            447 to 6,   // SILVER_POWDER - Bug
+            448 to 5,   // HARD_STONE - Rock
+            449 to 7,   // SPELL_TAG - Ghost
+            450 to 15,  // DRAGON_FANG - Dragon
+            451 to 16,  // BLACK_GLASSES - Dark
+            452 to 8    // METAL_COAT - Steel
         )
 
-        return if (typeBoostItems[itemId] == moveType) 1.2f else 1.0f
+        // Type Plates - 1.2x boost
+        val typePlates = mapOf(
+            FLAME_PLATE to 9,        // Fire
+            SPLASH_PLATE to 10,      // Water
+            MEADOW_PLATE to 11,      // Grass
+            ZAP_PLATE to 12,         // Electric
+            ICICLE_PLATE to 14,      // Ice
+            FIST_PLATE to 1,         // Fighting
+            TOXIC_PLATE to 3,        // Poison
+            EARTH_PLATE to 4,        // Ground
+            SKY_PLATE to 2,          // Flying
+            MIND_PLATE to 13,        // Psychic
+            INSECT_PLATE to 6,       // Bug
+            STONE_PLATE to 5,        // Rock
+            SPOOKY_PLATE to 7,       // Ghost
+            DRACO_PLATE to 15,       // Dragon
+            DREAD_PLATE to 16,       // Dark
+            IRON_PLATE to 8,         // Steel
+            PIXIE_PLATE to 17        // Fairy
+        )
+
+        // Type Gems - 1.3x boost (one-time use)
+        val typeGems = mapOf(
+            NORMAL_GEM to 0,         // Normal
+            FIRE_GEM to 9,           // Fire
+            WATER_GEM to 10,         // Water
+            ELECTRIC_GEM to 12,      // Electric
+            GRASS_GEM to 11,         // Grass
+            ICE_GEM to 14,           // Ice
+            FIGHTING_GEM to 1,       // Fighting
+            POISON_GEM to 3,         // Poison
+            GROUND_GEM to 4,         // Ground
+            FLYING_GEM to 2,         // Flying
+            PSYCHIC_GEM to 13,       // Psychic
+            BUG_GEM to 6,            // Bug
+            ROCK_GEM to 5,           // Rock
+            GHOST_GEM to 7,          // Ghost
+            DRAGON_GEM to 15,        // Dragon
+            DARK_GEM to 16,          // Dark
+            STEEL_GEM to 8,          // Steel
+            FAIRY_GEM to 17          // Fairy
+        )
+
+        return when {
+            typeItems[itemId] == moveType -> 1.1f
+            typePlates[itemId] == moveType -> 1.2f
+            typeGems[itemId] == moveType -> 1.3f
+            else -> 1.0f
+        }
     }
 
     /**
