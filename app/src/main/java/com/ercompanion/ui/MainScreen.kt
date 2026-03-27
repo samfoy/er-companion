@@ -437,7 +437,7 @@ fun MainScreen(
         }
     }
 
-        // Curse settings button (bottom-right corner) - only show in battle
+        // Curse settings button (bottom-right, offset to avoid optimal lines) - only show in battle
         val enemyLead2 = enemyPartyState.firstOrNull()
         val inBattle2 = enemyLead2 != null
         if (inBattle2) {
@@ -445,7 +445,7 @@ fun MainScreen(
                 onClick = { showCurseDialog = true },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(16.dp),
+                    .padding(end = 16.dp, bottom = 180.dp),  // Large bottom offset to avoid optimal lines
                 containerColor = if (activeCurses.totalCurses() > 0)
                     MaterialTheme.colorScheme.error
                 else
