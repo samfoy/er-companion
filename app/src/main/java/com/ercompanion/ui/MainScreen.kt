@@ -324,7 +324,8 @@ fun MainScreen(
                                     slotNumber = index + 1,
                                     enemyTarget = selectedEnemy,
                                     isActive = true,
-                                    showAiPrediction = false
+                                    showAiPrediction = false,
+                                    defaultExpanded = true  // Auto-expand active Pokemon in battle
                                 )
                             } else {
                                 val isExpanded = expandedBenchIndex == index
