@@ -3,6 +3,7 @@ package com.ercompanion.calc
 import com.ercompanion.data.PokemonData
 import com.ercompanion.parser.PartyMon
 import kotlin.math.abs
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Configuration for tiered search depth strategy.
@@ -24,14 +25,14 @@ object OptimalLineCalculator {
     private const val MAX_MOVE_ID = 847  // Maximum valid move ID in PokemonData
     private const val MAX_RECURSION_DEPTH = 100  // Stack depth limit for minimax
 
-    // Transposition table for caching evaluated positions
-    private val transpositionTable = mutableMapOf<Int, Float>()
+    // Transposition table for caching evaluated positions (thread-safe)
+    private val transpositionTable = ConcurrentHashMap<Int, Float>()
 
     // Recursion depth tracking for minimax
     private var recursionDepth = 0
 
-    // Cache for damage calculations (Issue 3.5)
-    private val damageCache = mutableMapOf<Triple<Int, Int, Int>, Int>()
+    // Cache for damage calculations (Issue 3.5, thread-safe)
+    private val damageCache = ConcurrentHashMap<Triple<Int, Int, Int>, Int>()
 
     /**
      * Calculate optimal move sequences for the current battle state.
@@ -63,10 +64,11 @@ object OptimalLineCalculator {
         curses: CurseState = CurseState.NONE,
         onProgress: ((Float) -> Unit)? = null
     ): List<BattleLine> {
-        // Clear caches for fresh search
-        transpositionTable.clear()
-        damageCache.clear()  // Issue 3.5: Clear damage cache
-        // Create initial battle state
+        return try {
+            // Clear caches for fresh search
+            transpositionTable.clear()
+            damageCache.clear()  // Issue 3.5: Clear damage cache
+            // Create initial battle state
         val initialState = BattleState(
             player = BattlerState(
                 mon = player,
@@ -112,10 +114,15 @@ object OptimalLineCalculator {
             line.copy(score = score)
         }
 
-        // Sort by score (descending) and return top N
-        return scoredLines
-            .sortedByDescending { it.score }
-            .take(topN)
+            // Sort by score (descending) and return top N
+            scoredLines
+                .sortedByDescending { it.score }
+                .take(topN)
+        } finally {
+            // Always clear caches on exit (even if exception occurs)
+            transpositionTable.clear()
+            damageCache.clear()
+        }
     }
 
     /**
@@ -531,7 +538,7 @@ object OptimalLineCalculator {
     ): MinimaxResult {
         // Check transposition table
         val stateHash = getStateHash(state)
-        if (forcedMove == null && stateHash in transpositionTable) {
+        if (forcedMove == null && transpositionTable.containsKey(stateHash)) {
             return MinimaxResult(transpositionTable[stateHash]!!, -1, emptyList(), state)
         }
 

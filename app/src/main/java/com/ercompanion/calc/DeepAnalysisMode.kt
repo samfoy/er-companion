@@ -289,6 +289,7 @@ object DeepAnalysisMode {
     ): Pair<RolloutResult, Int> {
         var state = initialState
         var turns = 0
+        var noProgressCounter = 0
 
         while (turns < maxDepth) {
             // Terminal check
@@ -306,9 +307,23 @@ object DeepAnalysisMode {
             val playerMove = playerMoves.random()
             val enemyMove = enemyMoves.random()
 
+            // Store HP before move
+            val prevPlayerHp = state.player.currentHp
+            val prevEnemyHp = state.enemy.currentHp
+
             // Simulate turn (creates new BattleState - performance-critical)
             state = MoveSimulator.simulateMove(state, playerMove, enemyMove)
             turns++
+
+            // Check for stalemate (no progress for 5 turns)
+            if (prevPlayerHp == state.player.currentHp && prevEnemyHp == state.enemy.currentHp) {
+                noProgressCounter++
+                if (noProgressCounter >= 5) {
+                    return Pair(RolloutResult.TIMEOUT, turns)  // Stalemate detected
+                }
+            } else {
+                noProgressCounter = 0  // Reset counter when progress is made
+            }
         }
 
         return Pair(RolloutResult.TIMEOUT, turns)
