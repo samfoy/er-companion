@@ -58,6 +58,9 @@ object AbilityData {
     private const val SNIPER = 97
     private const val SUPER_LUCK = 105
 
+    // Multi-hit ability
+    private const val SKILL_LINK = 92
+
     private val ABILITY_EFFECTS = mapOf(
         // Starter abilities (1.5x at low HP)
         OVERGROW to AbilityEffect(
@@ -236,6 +239,11 @@ object AbilityData {
             id = SNIPER,
             name = "Sniper",
             description = "Critical hits do 3x damage"
+        ),
+        SKILL_LINK to AbilityEffect(
+            id = SKILL_LINK,
+            name = "Skill Link",
+            description = "Multi-hit moves always hit 5 times"
         )
     )
 
@@ -352,5 +360,13 @@ object AbilityData {
             SNIPER -> 3.0f
             else -> 1.5f  // Standard crit multiplier in Gen 6+
         }
+    }
+
+    /**
+     * Check if ability makes multi-hit moves always hit maximum times.
+     * Skill Link: Multi-hit moves (2-5 hits) always hit 5 times.
+     */
+    fun forcesMaxHits(abilityId: Int): Boolean {
+        return abilityId == SKILL_LINK
     }
 }

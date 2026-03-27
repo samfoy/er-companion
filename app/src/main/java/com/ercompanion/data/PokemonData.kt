@@ -6,7 +6,9 @@ data class MoveData(
     val type: Int,
     val category: Int, // 0=physical, 1=special, 2=status
     val highCritRatio: Boolean = false, // Moves like Slash, Crabhammer (+1 crit stage)
-    val alwaysCrits: Boolean = false // Moves like Frost Breath, Storm Throw (always crit)
+    val alwaysCrits: Boolean = false, // Moves like Frost Breath, Storm Throw (always crit)
+    val multiHitMin: Int = 1, // Minimum hits (1 for normal moves, 2+ for multi-hit)
+    val multiHitMax: Int = 1  // Maximum hits (1 for normal moves, 2-5 for multi-hit)
 )
 
 object PokemonData {

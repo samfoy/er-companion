@@ -410,4 +410,119 @@ object CurseEffects {
         val multiplier = getEnemySecondaryEffectMultiplier(curses)
         return (baseChance * multiplier).coerceAtMost(1.0f)
     }
+
+    /**
+     * Check if enemy move causes flinch (Flinch Curse).
+     *
+     * Flinch Curse adds flat +10% flinch chance per curse (max 90%) to all enemy damaging moves.
+     * This stacks with move's base flinch chance and Serene Grace Curse multiplier.
+     *
+     * @param baseFlinchChance Move's base flinch chance (0.0 for most moves, 0.1 for Bite, etc.)
+     * @param curses The current curse state
+     * @param dealsDamage Whether the move deals damage (status moves can't flinch)
+     * @return true if flinch occurs
+     *
+     * Example (Tackle with 0% base flinch):
+     * - 0 curses: never flinches
+     * - 3 flinch curses: 30% flinch chance
+     * - 9 flinch curses: 90% flinch chance
+     *
+     * Example (Bite with 10% base flinch):
+     * - 0 curses: 10% flinch chance
+     * - 3 flinch curses: 40% flinch chance (10% base + 30% curse)
+     * - 3 flinch + 3 serene grace: 55% flinch chance (10% * 2.5 + 30%)
+     */
+    fun shouldFlinchOccur(baseFlinchChance: Float, curses: CurseState, dealsDamage: Boolean = true): Boolean {
+        if (!dealsDamage) {
+            return false
+        }
+
+        // Calculate effective flinch chance (includes base, Serene Grace, and Flinch Curse)
+        val effectiveFlinchChance = calculateEffectiveFlinchChance(baseFlinchChance, curses)
+
+        if (effectiveFlinchChance <= 0f) {
+            return false
+        }
+
+        // Roll for flinch
+        return kotlin.random.Random.nextFloat() < effectiveFlinchChance
+    }
+
+    /**
+     * Check if Priority Curse triggers to give enemy +1 priority.
+     *
+     * Priority Curse gives enemy 10% chance per curse (max 90%) to move first,
+     * regardless of speed or move priority.
+     *
+     * @param curses The current curse state
+     * @return true if priority boost triggers
+     *
+     * Example:
+     * - 0 curses: never triggers
+     * - 5 curses: 50% chance to move first
+     * - 9 curses: 90% chance to move first
+     *
+     * Usage in turn order calculation:
+     * ```
+     * if (isEnemyTurn && shouldPriorityBoostOccur(curses)) {
+     *     // Enemy moves first this turn regardless of speed/priority
+     *     enemyMovesFirst = true
+     * }
+     * ```
+     */
+    fun shouldPriorityBoostOccur(curses: CurseState): Boolean {
+        val priorityChance = getEnemyPriorityChance(curses)
+
+        if (priorityChance <= 0f) {
+            return false
+        }
+
+        // Roll for priority boost
+        return kotlin.random.Random.nextFloat() < priorityChance
+    }
+
+    /**
+     * Check if Endure Curse triggers to save enemy from KO.
+     *
+     * When enemy would be KO'd (HP reduced to 0 or below), roll for endure chance.
+     * Formula: 20% per endure curse, max 80%
+     *
+     * @param currentHp Enemy's current HP before damage
+     * @param damage Damage to be applied
+     * @param curses The current curse state
+     * @return true if Endure triggers (enemy survives at 1 HP)
+     *
+     * Example:
+     * - 0 curses: never triggers (0%)
+     * - 1 curse: 20% chance
+     * - 2 curses: 40% chance
+     * - 4 curses: 80% chance (max)
+     *
+     * Usage:
+     * ```
+     * val damage = calculateDamage(...)
+     * val newHp = currentHp - damage
+     * if (newHp <= 0 && shouldEndureTrigger(currentHp, damage, curses)) {
+     *     // Enemy endures at 1 HP
+     *     finalHp = 1
+     * } else {
+     *     finalHp = newHp.coerceAtLeast(0)
+     * }
+     * ```
+     */
+    fun shouldEndureTrigger(currentHp: Int, damage: Int, curses: CurseState): Boolean {
+        // Only triggers if damage would KO
+        if (currentHp - damage > 0) {
+            return false
+        }
+
+        // Get endure chance
+        val endureChance = getEnemyEndureChance(curses)
+        if (endureChance <= 0f) {
+            return false
+        }
+
+        // Roll for endure
+        return kotlin.random.Random.nextFloat() < endureChance
+    }
 }

@@ -8,8 +8,8 @@ import com.ercompanion.calc.CurseState
 
 data class DamageResult(
     val moveName: String,
-    val minDamage: Int,       // at 85% roll
-    val maxDamage: Int,       // at 100% roll
+    val minDamage: Int,       // at 85% roll (at min hits for multi-hit moves)
+    val maxDamage: Int,       // at 100% roll (at max hits for multi-hit moves)
     val effectiveness: Float, // 0.0, 0.25, 0.5, 1.0, 2.0, 4.0
     val effectLabel: String,  // "", "Not very effective", "Super effective!", "No effect", "Critical hit!"
     val percentMin: Int,      // min as % of target maxHP
@@ -17,7 +17,10 @@ data class DamageResult(
     val isStab: Boolean,
     val wouldKO: Boolean,     // percentMax >= 100
     val isValid: Boolean = true,  // false when stats are unavailable (pre-battle)
-    val isCrit: Boolean = false   // true if this was a critical hit
+    val isCrit: Boolean = false,  // true if this was a critical hit
+    val hitCount: Int = 1,        // Number of hits (1 for normal moves, 2-5 for multi-hit)
+    val hitCountMin: Int = 1,     // Minimum hits for multi-hit moves
+    val hitCountMax: Int = 1      // Maximum hits for multi-hit moves
 )
 
 /**
@@ -155,7 +158,10 @@ object DamageCalculator {
                 isStab = false,
                 wouldKO = false,
                 isValid = false,
-                isCrit = false
+                isCrit = false,
+                hitCount = 1,
+                hitCountMin = 1,
+                hitCountMax = 1
             )
         }
 
@@ -172,7 +178,10 @@ object DamageCalculator {
                 isStab = false,
                 wouldKO = false,
                 isValid = true,
-                isCrit = false
+                isCrit = false,
+                hitCount = 1,
+                hitCountMin = 1,
+                hitCountMax = 1
             )
         }
 
@@ -202,7 +211,10 @@ object DamageCalculator {
                 isStab = isStab,
                 wouldKO = true,
                 isValid = true,
-                isCrit = false
+                isCrit = false,
+                hitCount = 1,
+                hitCountMin = 1,
+                hitCountMax = 1
             )
         }
 
@@ -218,7 +230,10 @@ object DamageCalculator {
                 percentMax = 0,
                 isStab = false,
                 wouldKO = false,
-                isCrit = false
+                isCrit = false,
+                hitCount = 1,
+                hitCountMin = 1,
+                hitCountMax = 1
             )
         }
 
@@ -495,10 +510,36 @@ object DamageCalculator {
             }
         }
 
+        // ----- MULTI-HIT MOVES -----
+
+        // Determine hit counts for multi-hit moves
+        val hitCountMin: Int
+        val hitCountMax: Int
+
+        if (actualMoveData.multiHitMin > 1 || actualMoveData.multiHitMax > 1) {
+            // Multi-hit move
+            if (com.ercompanion.data.AbilityData.forcesMaxHits(attackerAbility)) {
+                // Skill Link: always max hits
+                hitCountMin = actualMoveData.multiHitMax
+                hitCountMax = actualMoveData.multiHitMax
+            } else {
+                // Normal distribution (2-5 hits: 35%, 35%, 15%, 15%)
+                hitCountMin = actualMoveData.multiHitMin
+                hitCountMax = actualMoveData.multiHitMax
+            }
+        } else {
+            // Single hit move
+            hitCountMin = 1
+            hitCountMax = 1
+        }
+
+        // Calculate damage per hit, then multiply by hit counts
+        val damagePerHit = effectiveBaseDamage
+
         // Random factor: 85-100%
         // Issue 2.4: Cap damage at MAX_DAMAGE (65535) to prevent overflow
-        val minDamage = (effectiveBaseDamage * 0.85f).toInt().coerceIn(1, MAX_DAMAGE)
-        val maxDamage = effectiveBaseDamage.coerceIn(1, MAX_DAMAGE)
+        val minDamage = (damagePerHit * 0.85f * hitCountMin).toInt().coerceIn(1, MAX_DAMAGE)
+        val maxDamage = (damagePerHit * hitCountMax).toInt().coerceIn(1, MAX_DAMAGE)
 
         // Calculate percentages
         val percentMin = if (targetMaxHP > 0) (minDamage * 100 / targetMaxHP) else 0
@@ -523,6 +564,20 @@ object DamageCalculator {
             }
         }
 
+        // Add multi-hit indicator to label
+        if (hitCountMin > 1 || hitCountMax > 1) {
+            val hitLabel = if (hitCountMin == hitCountMax) {
+                "($hitCountMax hits)"
+            } else {
+                "($hitCountMin-$hitCountMax hits)"
+            }
+            effectLabel = if (effectLabel.isNotEmpty()) {
+                "$effectLabel $hitLabel"
+            } else {
+                hitLabel
+            }
+        }
+
         return DamageResult(
             moveName = moveName,
             minDamage = minDamage,
@@ -533,7 +588,10 @@ object DamageCalculator {
             percentMax = percentMax,
             isStab = isStab,
             wouldKO = percentMax >= 100,
-            isCrit = isCrit
+            isCrit = isCrit,
+            hitCount = if (hitCountMin == hitCountMax) hitCountMax else (hitCountMin + hitCountMax) / 2,
+            hitCountMin = hitCountMin,
+            hitCountMax = hitCountMax
         )
     }
 
