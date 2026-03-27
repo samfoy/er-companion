@@ -428,7 +428,8 @@ object MoveSimulator {
             attackerMaxHp = attacker.mon.maxHp,
             attackerAbility = attacker.mon.ability,
             defenderAbility = defender.mon.ability,
-            isBurned = isBurned
+            isBurned = isBurned,
+            moveCategory = moveData.category
         )
 
         // Apply weather multiplier

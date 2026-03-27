@@ -413,13 +413,15 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
             val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
             if (md.power == 0) return@mapNotNull null
             val result = com.ercompanion.calc.DamageCalculator.calc(
-                mon.level,
-                if (md.category == 0) mon.attack else mon.spAttack,
-                if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense,
-                md.power, md.type,
-                PokemonData.getSpeciesTypes(mon.species),
-                PokemonData.getSpeciesTypes(enemyTarget.species),
-                enemyTarget.maxHp
+                attackerLevel = mon.level,
+                attackStat = if (md.category == 0) mon.attack else mon.spAttack,
+                defenseStat = if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense,
+                movePower = md.power,
+                moveType = md.type,
+                attackerTypes = PokemonData.getSpeciesTypes(mon.species),
+                defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
+                targetMaxHP = enemyTarget.maxHp,
+                moveCategory = md.category
             )
             if (!result.isValid) return@mapNotNull null
             if (enemyTarget.maxHp > 0) (result.maxDamage * 100 / enemyTarget.maxHp) else 0
@@ -432,13 +434,15 @@ fun BenchedMonChip(mon: PartyMon, enemyTarget: PartyMon?, onClick: (() -> Unit)?
             val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
             if (md.power == 0) return@mapNotNull null
             val result = com.ercompanion.calc.DamageCalculator.calc(
-                enemyTarget.level,
-                if (md.category == 0) enemyTarget.attack else enemyTarget.spAttack,
-                if (md.category == 0) mon.defense else mon.spDefense,
-                md.power, md.type,
-                PokemonData.getSpeciesTypes(enemyTarget.species),
-                PokemonData.getSpeciesTypes(mon.species),
-                mon.maxHp
+                attackerLevel = enemyTarget.level,
+                attackStat = if (md.category == 0) enemyTarget.attack else enemyTarget.spAttack,
+                defenseStat = if (md.category == 0) mon.defense else mon.spDefense,
+                movePower = md.power,
+                moveType = md.type,
+                attackerTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
+                defenderTypes = PokemonData.getSpeciesTypes(mon.species),
+                targetMaxHP = mon.maxHp,
+                moveCategory = md.category
             )
             if (!result.isValid) return@mapNotNull null
             if (mon.maxHp > 0) (result.maxDamage * 100 / mon.maxHp) else 0
@@ -1335,10 +1339,15 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
                                 val attackStat = if (md.category == 0) mon.attack else mon.spAttack
                                 val defenseStat = if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense
                                 val result = com.ercompanion.calc.DamageCalculator.calc(
-                                    mon.level, attackStat, defenseStat, md.power, md.type,
-                                    PokemonData.getSpeciesTypes(mon.species),
-                                    PokemonData.getSpeciesTypes(enemyTarget.species),
-                                    enemyTarget.maxHp
+                                    attackerLevel = mon.level,
+                                    attackStat = attackStat,
+                                    defenseStat = defenseStat,
+                                    movePower = md.power,
+                                    moveType = md.type,
+                                    attackerTypes = PokemonData.getSpeciesTypes(mon.species),
+                                    defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
+                                    targetMaxHP = enemyTarget.maxHp,
+                                    moveCategory = md.category
                                 )
                                 if (!result.isValid) return@maxByOrNull 0
                                 result.maxDamage

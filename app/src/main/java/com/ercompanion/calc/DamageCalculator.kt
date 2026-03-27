@@ -88,7 +88,7 @@ object DamageCalculator {
     }
 
     /**
-     * Calculate damage for a Pokemon move using Gen 6+ damage formula.
+     * Calculate damage for a Pokemon move using Gen 3 damage formula.
      *
      * @param isEnemyAttacking True if this is an enemy attack (for curse effects)
      * @param curses Active curse state (modifies enemy battle performance)
@@ -331,8 +331,9 @@ object DamageCalculator {
 
         // Apply burn BEFORE +2 (Gen 3 order: burn halves, then +2 is added)
         // Only affects physical moves; Guts ability (62) negates burn penalty
+        // Use integer division to match Gen 3 GBA code
         if (isBurned && moveCategory == 0 && attackerAbility != 62) {
-            baseDamage = (baseDamage * 0.5f).toInt()
+            baseDamage = baseDamage / 2
         }
 
         // Add the +2 constant (Gen 3 formula)
@@ -358,8 +359,14 @@ object DamageCalculator {
             1.0f
         }
 
+        // Apply STAB using integer math to match Gen 3 GBA code
+        // Gen 3: damage = damage * 15 / 10 (for 1.5x), damage = damage * 2 (for 2.0x)
         if (isStab) {
-            baseDamage = (baseDamage * finalStabMultiplier).toInt()
+            baseDamage = when {
+                finalStabMultiplier == 1.5f -> baseDamage * 15 / 10  // Standard STAB
+                finalStabMultiplier == 2.0f -> baseDamage * 2        // Adaptability
+                else -> (baseDamage * finalStabMultiplier).toInt()   // Curse-modified (rare)
+            }
         }
 
         // ----- TYPE EFFECTIVENESS -----

@@ -829,10 +829,15 @@ fun CompactMonCard(
                     val attackStat = if (md.category == 0) mon.attack else mon.spAttack
                     val defenseStat = if (md.category == 0) enemyTarget.defense else enemyTarget.spDefense
                     val result = com.ercompanion.calc.DamageCalculator.calc(
-                        mon.level, attackStat, defenseStat, md.power, md.type,
-                        PokemonData.getSpeciesTypes(mon.species),
-                        PokemonData.getSpeciesTypes(enemyTarget.species),
-                        enemyTarget.maxHp
+                        attackerLevel = mon.level,
+                        attackStat = attackStat,
+                        defenseStat = defenseStat,
+                        movePower = md.power,
+                        moveType = md.type,
+                        attackerTypes = PokemonData.getSpeciesTypes(mon.species),
+                        defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
+                        targetMaxHP = enemyTarget.maxHp,
+                        moveCategory = md.category
                     )
                     if (!result.isValid) 0 else result.maxDamage
                 }
@@ -1077,10 +1082,15 @@ fun CompactMoveRow(
     val attackStat = if (moveData.category == 0) mon.attack else mon.spAttack
     val defenseStat = if (moveData.category == 0) enemyTarget.defense else enemyTarget.spDefense
     val result = com.ercompanion.calc.DamageCalculator.calc(
-        mon.level, attackStat, defenseStat, moveData.power, moveData.type,
-        PokemonData.getSpeciesTypes(mon.species),
-        PokemonData.getSpeciesTypes(enemyTarget.species),
-        enemyTarget.maxHp
+        attackerLevel = mon.level,
+        attackStat = attackStat,
+        defenseStat = defenseStat,
+        movePower = moveData.power,
+        moveType = moveData.type,
+        attackerTypes = PokemonData.getSpeciesTypes(mon.species),
+        defenderTypes = PokemonData.getSpeciesTypes(enemyTarget.species),
+        targetMaxHP = enemyTarget.maxHp,
+        moveCategory = moveData.category
     )
 
     val effectColor = when {
@@ -1357,13 +1367,15 @@ private fun calculateBestOutgoingDamage(attacker: PartyMon, defender: PartyMon):
         val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
         if (md.power == 0) return@mapNotNull null
         val result = com.ercompanion.calc.DamageCalculator.calc(
-            attacker.level,
-            if (md.category == 0) attacker.attack else attacker.spAttack,
-            if (md.category == 0) defender.defense else defender.spDefense,
-            md.power, md.type,
-            PokemonData.getSpeciesTypes(attacker.species),
-            PokemonData.getSpeciesTypes(defender.species),
-            defender.maxHp
+            attackerLevel = attacker.level,
+            attackStat = if (md.category == 0) attacker.attack else attacker.spAttack,
+            defenseStat = if (md.category == 0) defender.defense else defender.spDefense,
+            movePower = md.power,
+            moveType = md.type,
+            attackerTypes = PokemonData.getSpeciesTypes(attacker.species),
+            defenderTypes = PokemonData.getSpeciesTypes(defender.species),
+            targetMaxHP = defender.maxHp,
+            moveCategory = md.category
         )
         if (!result.isValid) return@mapNotNull null
         if (defender.maxHp > 0) (result.maxDamage * 100 / defender.maxHp) else 0
@@ -1375,13 +1387,15 @@ private fun calculateBestIncomingDamage(defender: PartyMon, attacker: PartyMon):
         val md = PokemonData.getMoveData(moveId) ?: return@mapNotNull null
         if (md.power == 0) return@mapNotNull null
         val result = com.ercompanion.calc.DamageCalculator.calc(
-            attacker.level,
-            if (md.category == 0) attacker.attack else attacker.spAttack,
-            if (md.category == 0) defender.defense else defender.spDefense,
-            md.power, md.type,
-            PokemonData.getSpeciesTypes(attacker.species),
-            PokemonData.getSpeciesTypes(defender.species),
-            defender.maxHp
+            attackerLevel = attacker.level,
+            attackStat = if (md.category == 0) attacker.attack else attacker.spAttack,
+            defenseStat = if (md.category == 0) defender.defense else defender.spDefense,
+            movePower = md.power,
+            moveType = md.type,
+            attackerTypes = PokemonData.getSpeciesTypes(attacker.species),
+            defenderTypes = PokemonData.getSpeciesTypes(defender.species),
+            targetMaxHP = defender.maxHp,
+            moveCategory = md.category
         )
         if (!result.isValid) return@mapNotNull null
         if (defender.maxHp > 0) (result.maxDamage * 100 / defender.maxHp) else 0
