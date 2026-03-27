@@ -2148,9 +2148,9 @@ fun OptimalLineDisplay(
                         when {
                             mcRunning -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 2.dp,
+                                    Text(
+                                        text = "⟳",
+                                        fontSize = 14.sp,
                                         color = Color(0xFFFFD700)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
