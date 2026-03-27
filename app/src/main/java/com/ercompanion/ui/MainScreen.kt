@@ -2045,7 +2045,7 @@ fun OptimalLineDisplay(
     if (activeMon == null || enemyLead == null) return
 
     var expanded by remember { mutableStateOf(false) }
-    // 0=2-turn, 1=3-turn, 2=Monte Carlo (Deep)
+    // 0=2-turn, 1=3-turn, 2=MC (Deep/50 samples), 3=MC+ (Exhaustive/100 samples + switching)
     var analysisMode by remember { mutableStateOf(0) }
     var mcRunning by remember { mutableStateOf(false) }
     val activeCurses = viewModel.curseState.collectAsState().value
@@ -2053,7 +2053,7 @@ fun OptimalLineDisplay(
 
     // Standard lines (modes 0 and 1) — cached
     val lines = remember(activeMon.species, enemyLead.species, activeMon.moves, enemyLead.moves, activeCurses, analysisMode) {
-        if (analysisMode == 2) return@remember emptyList()
+        if (analysisMode >= 2) return@remember emptyList()
         try {
             com.ercompanion.calc.OptimalLineCalculator.calculateOptimalLines(
                 player = activeMon,
@@ -2068,8 +2068,9 @@ fun OptimalLineDisplay(
         }
     }
 
-    // Monte Carlo report (mode 2) — runs async
+    // Monte Carlo report (modes 2/3) — runs async, separate cache per depth
     var mcReport by remember { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
+    var mcReportPlus by remember { mutableStateOf<com.ercompanion.calc.DeepAnalysisReport?>(null) }
     var mcProgress by remember { mutableStateOf("") }
 
     Card(
@@ -2099,8 +2100,8 @@ fun OptimalLineDisplay(
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Mode toggle: 2T / 3T / MC
-                    listOf("2T", "3T", "MC").forEachIndexed { idx, label ->
+                    // Mode toggle: 2T / 3T / MC / MC+
+                    listOf("2T", "3T", "MC", "MC+").forEachIndexed { idx, label ->
                         Text(
                             text = label,
                             fontSize = 9.sp,
@@ -2110,19 +2111,25 @@ fun OptimalLineDisplay(
                                 .clickable {
                                     analysisMode = idx
                                     if (!expanded) expanded = true
-                                    if (idx == 2 && mcReport == null && !mcRunning) {
+                                    val isMcMode = idx == 2 || idx == 3
+                                    val alreadyHasReport = if (idx == 2) mcReport != null else mcReportPlus != null
+                                    if (isMcMode && !alreadyHasReport && !mcRunning) {
                                         mcRunning = true
-                                        mcProgress = "Analyzing…"
+                                        mcProgress = if (idx == 3) "Running full analysis…" else "Analyzing…"
                                         coroutineScope.launch(Dispatchers.Default) {
                                             try {
+                                                val depth = if (idx == 3)
+                                                    com.ercompanion.calc.AnalysisDepth.EXHAUSTIVE
+                                                else
+                                                    com.ercompanion.calc.AnalysisDepth.DEEP
                                                 val result = com.ercompanion.calc.DeepAnalysisMode.performDeepAnalysis(
                                                     player = activeMon,
                                                     enemy = enemyLead,
-                                                    depth = com.ercompanion.calc.AnalysisDepth.DEEP,
+                                                    depth = depth,
                                                     curses = activeCurses,
                                                     onProgress = { msg -> mcProgress = msg }
                                                 )
-                                                mcReport = result
+                                                if (idx == 3) mcReportPlus = result else mcReport = result
                                             } catch (e: Exception) {
                                                 mcProgress = "Error: ${e.message}"
                                             } finally {
@@ -2133,7 +2140,7 @@ fun OptimalLineDisplay(
                                 }
                                 .padding(horizontal = 5.dp, vertical = 2.dp)
                         )
-                        if (idx < 2) Text(text = "/", fontSize = 9.sp, color = Color(0xFF555555), modifier = Modifier.padding(horizontal = 1.dp))
+                        if (idx < 3) Text(text = "/", fontSize = 9.sp, color = Color(0xFF555555), modifier = Modifier.padding(horizontal = 1.dp))
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(text = if (expanded) "▲" else "▼", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
@@ -2149,7 +2156,7 @@ fun OptimalLineDisplay(
                 ) {
                     Divider(color = Color(0xFF3A2A3A), modifier = Modifier.padding(bottom = 8.dp))
 
-                    if (analysisMode == 2) {
+                    if (analysisMode >= 2) {
                         // Monte Carlo mode
                         when {
                             mcRunning -> {
@@ -2163,8 +2170,8 @@ fun OptimalLineDisplay(
                                     Text(text = mcProgress, fontSize = 10.sp, color = Color.Gray)
                                 }
                             }
-                            mcReport != null -> {
-                                val report = mcReport!!
+                            (if (analysisMode == 3) mcReportPlus else mcReport) != null -> {
+                                val report = (if (analysisMode == 3) mcReportPlus else mcReport)!!
                                 // Win rate
                                 report.monteCarloResult?.let { mc ->
                                     val winPct = (mc.winRate * 100).toInt()
