@@ -1097,6 +1097,14 @@ fun PokemonCard(viewModel: MainViewModel, mon: PartyMon, slotNumber: Int, enemyT
     // Key on isActive so the card auto-expands when this mon becomes the active battler
     var expanded by remember(mon.species, isActive) { mutableStateOf(defaultExpanded || isActive) }
     var buildsExpanded by remember(mon.species) { mutableStateOf(false) }
+
+    // Force expansion when becoming active or when defaultExpanded is true
+    androidx.compose.runtime.LaunchedEffect(isActive, defaultExpanded) {
+        if (isActive || defaultExpanded) {
+            expanded = true
+        }
+    }
+
     val speciesName = PokemonData.getSpeciesName(mon.species)
     val pokemonBuild = viewModel.getBuildForSpecies(speciesName)
 
