@@ -11,12 +11,13 @@ data class DamageResult(
     val minDamage: Int,       // at 85% roll
     val maxDamage: Int,       // at 100% roll
     val effectiveness: Float, // 0.0, 0.25, 0.5, 1.0, 2.0, 4.0
-    val effectLabel: String,  // "", "Not very effective", "Super effective!", "No effect"
+    val effectLabel: String,  // "", "Not very effective", "Super effective!", "No effect", "Critical hit!"
     val percentMin: Int,      // min as % of target maxHP
     val percentMax: Int,      // max as % of target maxHP
     val isStab: Boolean,
     val wouldKO: Boolean,     // percentMax >= 100
-    val isValid: Boolean = true  // false when stats are unavailable (pre-battle)
+    val isValid: Boolean = true,  // false when stats are unavailable (pre-battle)
+    val isCrit: Boolean = false   // true if this was a critical hit
 )
 
 /**
@@ -92,11 +93,13 @@ object DamageCalculator {
      *
      * @param isEnemyAttacking True if this is an enemy attack (for curse effects)
      * @param curses Active curse state (modifies enemy battle performance)
+     * @param forceCrit Force a critical hit (for testing or always-crit moves)
+     * @param allowCrits Allow critical hits (set to false to disable crits)
      *
      * Curse effects implemented:
      * - OHKO Curse: Enemy attacks always OHKO
      * - Adaptability Curse: Enemy STAB moves deal extra damage
-     * - Crit Curse: Not implemented (base damage calc doesn't handle crits)
+     * - Crit Curse: Enemy critical hit chance increased
      * - Endure Curse: Should be checked by caller when applying damage
      */
     fun calc(
@@ -130,7 +133,11 @@ object DamageCalculator {
         attackerSpecies: Int = 0,         // For type checking in weather stat multipliers
         defenderSpecies: Int = 0,
         isEnemyAttacking: Boolean = false,  // Needed to know when to apply curses
-        curses: CurseState = CurseState.NONE
+        curses: CurseState = CurseState.NONE,
+
+        // Critical hit parameters
+        forceCrit: Boolean = false,       // Force a critical hit (for testing)
+        allowCrits: Boolean = true        // Allow critical hits (set false to disable)
     ): DamageResult {
         // NOTE: For active battlers, stats should come from gBattleMons which are already
         // modified by stat stages (baseline=6). Do NOT manually apply stat stage modifiers.
@@ -147,7 +154,8 @@ object DamageCalculator {
                 percentMax = 0,
                 isStab = false,
                 wouldKO = false,
-                isValid = false
+                isValid = false,
+                isCrit = false
             )
         }
 
@@ -163,7 +171,8 @@ object DamageCalculator {
                 percentMax = 0,
                 isStab = false,
                 wouldKO = false,
-                isValid = true
+                isValid = true,
+                isCrit = false
             )
         }
 
@@ -192,7 +201,8 @@ object DamageCalculator {
                 percentMax = 100,
                 isStab = isStab,
                 wouldKO = true,
-                isValid = true
+                isValid = true,
+                isCrit = false
             )
         }
 
@@ -207,7 +217,8 @@ object DamageCalculator {
                 percentMin = 0,
                 percentMax = 0,
                 isStab = false,
-                wouldKO = false
+                wouldKO = false,
+                isCrit = false
             )
         }
 
@@ -463,6 +474,27 @@ object DamageCalculator {
             }
         }
 
+        // ----- CRITICAL HIT -----
+
+        var isCrit = false
+        if (allowCrits && movePower > 0) {
+            isCrit = shouldCrit(
+                attackerAbility = attackerAbility,
+                attackerItem = attackerItem,
+                defenderAbility = defenderAbility,
+                moveData = moveData,
+                curses = curses,
+                isEnemyAttacking = isEnemyAttacking,
+                forceCrit = forceCrit
+            )
+
+            if (isCrit) {
+                // Apply crit multiplier (1.5x standard, 3x for Sniper)
+                val critMultiplier = com.ercompanion.data.AbilityData.getCritDamageMultiplier(attackerAbility)
+                effectiveBaseDamage = (effectiveBaseDamage * critMultiplier).toInt()
+            }
+        }
+
         // Random factor: 85-100%
         // Issue 2.4: Cap damage at MAX_DAMAGE (65535) to prevent overflow
         val minDamage = (effectiveBaseDamage * 0.85f).toInt().coerceIn(1, MAX_DAMAGE)
@@ -473,13 +505,22 @@ object DamageCalculator {
         val percentMax = if (targetMaxHP > 0) (maxDamage * 100 / targetMaxHP) else 0
 
         // Effect label
-        val effectLabel = when {
+        var effectLabel = when {
             typeEffectiveness == 0f -> "No effect"
             typeEffectiveness < 0.5f -> "Not very effective"
             typeEffectiveness < 1f -> "Not very effective"
             typeEffectiveness > 2f -> "Super effective!"
             typeEffectiveness > 1f -> "Super effective!"
             else -> ""
+        }
+
+        // Add critical hit indicator to label
+        if (isCrit) {
+            effectLabel = if (effectLabel.isNotEmpty()) {
+                "$effectLabel + Critical hit!"
+            } else {
+                "Critical hit!"
+            }
         }
 
         return DamageResult(
@@ -491,7 +532,8 @@ object DamageCalculator {
             percentMin = percentMin,
             percentMax = percentMax,
             isStab = isStab,
-            wouldKO = percentMax >= 100
+            wouldKO = percentMax >= 100,
+            isCrit = isCrit
         )
     }
 
@@ -562,5 +604,115 @@ object DamageCalculator {
             }
             effectiveness
         }
+    }
+
+    /**
+     * Calculate critical hit stage.
+     *
+     * Base stage: 0
+     * High crit moves (Slash, Crabhammer, etc.): +1
+     * Super Luck ability: +1
+     * Scope Lens/Razor Claw items: +1
+     * Focus Energy/Dire Hit: +2 (not implemented yet)
+     *
+     * @return Crit stage (0-4, capped at 4)
+     */
+    private fun getCritStage(
+        attackerAbility: Int,
+        attackerItem: Int,
+        moveData: MoveData?
+    ): Int {
+        var stage = 0
+
+        // High crit ratio moves
+        if (moveData?.highCritRatio == true) {
+            stage += 1
+        }
+
+        // Super Luck ability
+        stage += com.ercompanion.data.AbilityData.getCritStageBonus(attackerAbility)
+
+        // Scope Lens (482) or Razor Claw (503) items
+        if (attackerItem == 482 || attackerItem == 503) {
+            stage += 1
+        }
+
+        // Cap at stage 4
+        return stage.coerceIn(0, 4)
+    }
+
+    /**
+     * Calculate critical hit chance.
+     *
+     * Gen 6+ formula: chance = (stage + 1) / 24
+     * - Stage 0: 1/24 (~4.17%)
+     * - Stage 1: 2/24 (~8.33%)
+     * - Stage 2: 3/24 (12.5%)
+     * - Stage 3: 4/24 (~16.67%)
+     * - Stage 4+: 5/24 (~20.83%)
+     *
+     * Crit Curse adds flat bonus (10% per curse, max 90%).
+     *
+     * @return Crit chance (0.0 to 1.0, capped at 100%)
+     */
+    fun calculateCritChance(
+        critStage: Int,
+        curses: CurseState,
+        isEnemyAttacking: Boolean
+    ): Float {
+        // Base crit chance from stage
+        val baseCritChance = (critStage + 1).toFloat() / 24f
+
+        // Add curse boost for enemy attacks
+        val curseBoost = if (isEnemyAttacking) {
+            CurseEffects.getEnemyCritBoost(curses)
+        } else {
+            0f
+        }
+
+        return (baseCritChance + curseBoost).coerceIn(0f, 1f)
+    }
+
+    /**
+     * Check if a critical hit occurs.
+     *
+     * @param attackerAbility Attacker's ability
+     * @param defenderAbility Defender's ability (Battle Armor/Shell Armor block crits)
+     * @param moveData Move data (for always-crit moves)
+     * @param curses Curse state
+     * @param isEnemyAttacking Whether enemy is attacking (for curse effects)
+     * @return true if crit occurs
+     */
+    fun shouldCrit(
+        attackerAbility: Int,
+        attackerItem: Int,
+        defenderAbility: Int,
+        moveData: MoveData?,
+        curses: CurseState,
+        isEnemyAttacking: Boolean,
+        forceCrit: Boolean = false // For testing
+    ): Boolean {
+        // Always-crit moves (Frost Breath, Storm Throw)
+        if (moveData?.alwaysCrits == true) {
+            // Still blocked by Battle Armor/Shell Armor
+            return !com.ercompanion.data.AbilityData.blocksCrits(defenderAbility)
+        }
+
+        // Forced crit (for testing or special scenarios)
+        if (forceCrit) {
+            return !com.ercompanion.data.AbilityData.blocksCrits(defenderAbility)
+        }
+
+        // Battle Armor/Shell Armor blocks crits
+        if (com.ercompanion.data.AbilityData.blocksCrits(defenderAbility)) {
+            return false
+        }
+
+        // Calculate crit chance
+        val critStage = getCritStage(attackerAbility, attackerItem, moveData)
+        val critChance = calculateCritChance(critStage, curses, isEnemyAttacking)
+
+        // Roll for crit (using random for now, could be deterministic for AI)
+        return kotlin.random.Random.nextFloat() < critChance
     }
 }

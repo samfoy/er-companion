@@ -4,7 +4,9 @@ data class MoveData(
     val name: String,
     val power: Int,
     val type: Int,
-    val category: Int // 0=physical, 1=special, 2=status
+    val category: Int, // 0=physical, 1=special, 2=status
+    val highCritRatio: Boolean = false, // Moves like Slash, Crabhammer (+1 crit stage)
+    val alwaysCrits: Boolean = false // Moves like Frost Breath, Storm Throw (always crit)
 )
 
 object PokemonData {

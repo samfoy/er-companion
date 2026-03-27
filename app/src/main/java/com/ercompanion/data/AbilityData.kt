@@ -52,6 +52,12 @@ object AbilityData {
     private const val NO_GUARD = 99
     private const val CLEAR_BODY = 29
 
+    // Critical hit related abilities
+    private const val BATTLE_ARMOR = 4
+    private const val SHELL_ARMOR = 75
+    private const val SNIPER = 97
+    private const val SUPER_LUCK = 105
+
     private val ABILITY_EFFECTS = mapOf(
         // Starter abilities (1.5x at low HP)
         OVERGROW to AbilityEffect(
@@ -208,6 +214,28 @@ object AbilityData {
             id = CLEAR_BODY,
             name = "Clear Body",
             description = "Prevents stat reduction"
+        ),
+
+        // Critical hit abilities
+        BATTLE_ARMOR to AbilityEffect(
+            id = BATTLE_ARMOR,
+            name = "Battle Armor",
+            description = "Blocks critical hits"
+        ),
+        SHELL_ARMOR to AbilityEffect(
+            id = SHELL_ARMOR,
+            name = "Shell Armor",
+            description = "Blocks critical hits"
+        ),
+        SUPER_LUCK to AbilityEffect(
+            id = SUPER_LUCK,
+            name = "Super Luck",
+            description = "+1 critical hit stage"
+        ),
+        SNIPER to AbilityEffect(
+            id = SNIPER,
+            name = "Sniper",
+            description = "Critical hits do 3x damage"
         )
     )
 
@@ -295,5 +323,34 @@ object AbilityData {
             return 0.5f  // Fire or Ice
         }
         return 1.0f
+    }
+
+    /**
+     * Check if ability blocks critical hits (Battle Armor, Shell Armor).
+     */
+    fun blocksCrits(abilityId: Int): Boolean {
+        return abilityId == BATTLE_ARMOR || abilityId == SHELL_ARMOR
+    }
+
+    /**
+     * Get critical hit stage bonus from ability.
+     * Super Luck adds +1 crit stage.
+     */
+    fun getCritStageBonus(abilityId: Int): Int {
+        return when (abilityId) {
+            SUPER_LUCK -> 1
+            else -> 0
+        }
+    }
+
+    /**
+     * Get critical hit damage multiplier from ability.
+     * Sniper makes crits do 3x damage instead of 1.5x (Gen 6+ formula).
+     */
+    fun getCritDamageMultiplier(abilityId: Int): Float {
+        return when (abilityId) {
+            SNIPER -> 3.0f
+            else -> 1.5f  // Standard crit multiplier in Gen 6+
+        }
     }
 }
