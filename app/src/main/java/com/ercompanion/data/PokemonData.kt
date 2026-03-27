@@ -3397,6 +3397,59 @@ object PokemonData {
         800 to listOf(13, 8), 801 to listOf(8, 17), 802 to listOf(1, 7), 803 to listOf(3),
         804 to listOf(3, 15), 805 to listOf(5, 8), 806 to listOf(12, 5),
         807 to listOf(12, 1), 808 to listOf(8, 7), 809 to listOf(12),
+        // Gen 8 (Sword/Shield) — 810-905
+        810 to listOf(11), 811 to listOf(11), 812 to listOf(11, 16),
+        813 to listOf(9), 814 to listOf(9), 815 to listOf(9),
+        816 to listOf(10), 817 to listOf(10), 818 to listOf(10),
+        819 to listOf(0), 820 to listOf(0, 12),
+        821 to listOf(2, 12), 822 to listOf(2, 0), 823 to listOf(2, 8),
+        824 to listOf(6), 825 to listOf(13, 15), 826 to listOf(13, 17),
+        827 to listOf(16), 828 to listOf(16, 17),
+        829 to listOf(11, 0), 830 to listOf(11, 0),
+        831 to listOf(0), 832 to listOf(0),
+        833 to listOf(10), 834 to listOf(10, 5),
+        835 to listOf(12), 836 to listOf(12, 8),
+        837 to listOf(5), 838 to listOf(9, 5), 839 to listOf(9, 5),
+        840 to listOf(6, 15), 841 to listOf(11, 3), 842 to listOf(11, 14),
+        843 to listOf(4), 844 to listOf(4, 3),
+        845 to listOf(10, 2),
+        846 to listOf(10), 847 to listOf(10),
+        848 to listOf(12, 3), 849 to listOf(12, 3),
+        850 to listOf(9, 10), 851 to listOf(9, 6),
+        852 to listOf(1), 853 to listOf(1, 7),
+        854 to listOf(7), 855 to listOf(7),
+        856 to listOf(13), 857 to listOf(13, 17),
+        858 to listOf(13, 17),
+        859 to listOf(16, 17), 860 to listOf(16, 17), 861 to listOf(16, 17),
+        862 to listOf(1, 16), 863 to listOf(0, 1),
+        864 to listOf(7, 0), 865 to listOf(8, 7),
+        866 to listOf(14, 7), 867 to listOf(7, 11),
+        868 to listOf(17), 869 to listOf(17),
+        870 to listOf(12, 1),
+        871 to listOf(12, 3),
+        872 to listOf(6, 14), 873 to listOf(6, 2),
+        874 to listOf(5), 875 to listOf(14, 8),
+        876 to listOf(0, 13), // Indeedee
+        877 to listOf(12, 0),
+        878 to listOf(8), 879 to listOf(8, 2),
+        880 to listOf(12, 15), 881 to listOf(12, 14), 882 to listOf(10, 15), 883 to listOf(10, 14),
+        884 to listOf(15, 8),
+        885 to listOf(7, 15), 886 to listOf(7, 15), 887 to listOf(7, 15),
+        888 to listOf(13, 17), 889 to listOf(13, 16),
+        890 to listOf(3, 15),
+        891 to listOf(1), 892 to listOf(1, 10),
+        893 to listOf(10, 15),
+        894 to listOf(12, 3), 895 to listOf(13, 15),
+        896 to listOf(14, 5), 897 to listOf(7, 11), 898 to listOf(13, 7),
+        // Gen 8 DLC / Isle of Armor / Crown Tundra
+        // Hisui mons (899-905)
+        899 to listOf(13, 8), // Wyrdeer — Normal/Psychic
+        900 to listOf(6, 5),  // Kleavor — Bug/Rock
+        901 to listOf(4, 0),  // Ursaluna — Ground/Normal
+        902 to listOf(10, 7), // Basculegion — Water/Ghost
+        903 to listOf(3, 1),  // Sneasler — Poison/Fighting
+        904 to listOf(3, 10), // Overqwil — Poison/Water
+        905 to listOf(17, 2), // Enamorus — Fairy/Flying
         // Form species (FORMS_START = 905)
         907 to listOf(9, 15), 908 to listOf(9, 2), 913 to listOf(10, 13),
         916 to listOf(6, 2), 917 to listOf(10, 16), 919 to listOf(13, 1),
