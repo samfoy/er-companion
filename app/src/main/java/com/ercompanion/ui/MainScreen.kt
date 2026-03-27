@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.ercompanion.MainViewModel
+import com.ercompanion.calc.Weather
 import com.ercompanion.data.MoveData
 import com.ercompanion.data.PokemonData
 import com.ercompanion.network.RetroArchClient
@@ -1686,7 +1687,7 @@ fun MoveItem(mon: PartyMon, moveId: Int, moveIndex: Int, enemyTarget: PartyMon?,
         defenderTypes = defenderTypes,
         targetMaxHP = enemyTarget.maxHp,
         isBurned = false,
-        weather = 0,
+        weather = Weather.NONE,
         moveName = moveName
     )
 

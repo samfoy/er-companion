@@ -116,7 +116,7 @@ object DamageCalculator {
         defenderTypes: List<Int>,
         targetMaxHP: Int,
         isBurned: Boolean = false,
-        weather: Int = 0,   // 0 = none, Weather enum ordinal
+        weather: Weather = Weather.NONE,  // Issue 1.12: Use Weather enum directly
         moveName: String = "Unknown",
         attackerItem: Int = 0,
         defenderItem: Int = 0,
@@ -326,10 +326,9 @@ object DamageCalculator {
         modifiedDefenseStat = (modifiedDefenseStat * abilityDefMult).toInt()
 
         // Apply weather stat multipliers (Sandstorm boosts Rock SpDef)
-        if (weather != 0 && weather < Weather.values().size) {
-            val weatherEnum = Weather.values()[weather]
+        if (weather != Weather.NONE) {
             val weatherStatMult = WeatherEffects.getWeatherStatMultiplier(
-                weatherEnum,
+                weather,
                 defenderBattler,
                 if (moveCategory == 0) "defense" else "spDefense"
             )
@@ -422,10 +421,9 @@ object DamageCalculator {
 
         // ----- WEATHER MULTIPLIERS -----
 
-        if (weather != 0 && weather < Weather.values().size) {
-            val weatherEnum = Weather.values()[weather]
+        if (weather != Weather.NONE) {
             val weatherMult = WeatherEffects.getWeatherMultiplier(
-                weatherEnum,
+                weather,
                 moveType,
                 attackerBattler
             )

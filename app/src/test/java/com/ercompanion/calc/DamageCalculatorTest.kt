@@ -593,7 +593,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_FIRE),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = 0  // No weather
+            weather = Weather.NONE  // No weather
         )
 
         val sunDamage = DamageCalculator.calc(
@@ -605,7 +605,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_FIRE),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = Weather.SUN.ordinal
+            weather = Weather.SUN
         )
 
         // Sun should boost damage by 1.5x
@@ -625,7 +625,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_FIRE),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = 0
+            weather = Weather.NONE
         )
 
         val rainDamage = DamageCalculator.calc(
@@ -637,7 +637,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_FIRE),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = Weather.RAIN.ordinal
+            weather = Weather.RAIN
         )
 
         // Rain should weaken damage by 0.5x
@@ -657,7 +657,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_WATER),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = 0
+            weather = Weather.NONE
         )
 
         val rainDamage = DamageCalculator.calc(
@@ -669,7 +669,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_WATER),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = Weather.RAIN.ordinal
+            weather = Weather.RAIN
         )
 
         assertTrue("Rain should boost Water move damage",
@@ -688,7 +688,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_WATER),
             defenderTypes = listOf(TYPE_ROCK),
             targetMaxHP = 150,
-            weather = 0,
+            weather = Weather.NONE,
             moveCategory = 1,  // Special
             defenderSpecies = 74  // Geodude (Rock type)
         )
@@ -702,7 +702,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_WATER),
             defenderTypes = listOf(TYPE_ROCK),
             targetMaxHP = 150,
-            weather = Weather.SANDSTORM.ordinal,
+            weather = Weather.SANDSTORM,
             moveCategory = 1,
             defenderSpecies = 74
         )
@@ -992,7 +992,7 @@ class DamageCalculatorTest {
             attackerTypes = listOf(TYPE_FIRE),
             defenderTypes = listOf(TYPE_NORMAL),
             targetMaxHP = 150,
-            weather = Weather.SUN.ordinal,
+            weather = Weather.SUN,
             terrain = Terrain.GRASSY.ordinal,
             isGrounded = true
         )

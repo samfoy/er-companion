@@ -33,7 +33,7 @@ fun main() {
         attackerTypes = listOf(10),
         defenderTypes = listOf(0),
         targetMaxHP = 150,
-        weather = Weather.SUN.ordinal
+        weather = Weather.SUN
     )
     val sunBoost = sunDamage.maxDamage.toFloat() / baseDamage.maxDamage
     println("Sun boost for Fire: ${sunBoost}x (expected 1.5x)")
@@ -49,7 +49,7 @@ fun main() {
         attackerTypes = listOf(10),
         defenderTypes = listOf(0),
         targetMaxHP = 150,
-        weather = Weather.RAIN.ordinal
+        weather = Weather.RAIN
     )
     val rainWeaken = rainDamage.maxDamage.toFloat() / baseDamage.maxDamage
     println("Rain nerf for Fire: ${rainWeaken}x (expected 0.5x)")
